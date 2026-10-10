@@ -379,7 +379,7 @@ def main():
     parser.add_argument("--db", default=os.getenv("MONITOR_DB", str(default_db)))
     parser.add_argument("--refresh", type=int, default=10, help="Aktualisierung in Sekunden")
     parser.add_argument("--network", default=os.getenv("NETWORK_CIDR", "auto"))
-    parser.add_argument("--scan-interval", type=int, default=60, help="Pause zwischen Scans in Sekunden")
+    parser.add_argument("--scan-interval", type=int, default=5, help="Pause zwischen Scans in Sekunden")
     args = parser.parse_args()
     if not 1 <= args.scan_interval <= 86400:
         parser.error("--scan-interval muss zwischen 1 und 86400 liegen")
