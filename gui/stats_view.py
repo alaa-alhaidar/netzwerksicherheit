@@ -53,26 +53,26 @@ class HistoryChart(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QColor('#111d2e'))
-        painter.setPen(QPen(QColor('#28394f')))
+        painter.setBrush(QColor('#ffffff'))
+        painter.setPen(QPen(QColor('#dce4ee')))
         painter.drawRoundedRect(QRectF(1, 1, self.width()-2, self.height()-2), 10, 10)
-        painter.setPen(QColor('#dce6f0'))
+        painter.setPen(QColor('#243247'))
         painter.drawText(18, 26, self.caption)
         valid = [(stamp, value) for stamp, value in self.points if value is not None]
         if not valid:
-            painter.setPen(QColor('#91a4bc'))
+            painter.setPen(QColor('#62748a'))
             painter.drawText(18, 90, 'Noch keine Messwerte im gewählten Zeitraum')
             return
         left, right, top, bottom = 54, self.width()-24, 52, self.height()-38
         maximum = max(max(value for _, value in valid) * 1.15, 1)
         first, last = self.points[0][0], self.points[-1][0]
         duration = max(last-first, 1)
-        painter.setPen(QPen(QColor('#28394f'), 1))
+        painter.setPen(QPen(QColor('#dce4ee'), 1))
         for index in range(3):
             y = bottom - (bottom-top)*index/2
-            painter.setPen(QPen(QColor('#28394f'), 1))
+            painter.setPen(QPen(QColor('#dce4ee'), 1))
             painter.drawLine(QPointF(left, y), QPointF(right, y))
-            painter.setPen(QColor('#91a4bc'))
+            painter.setPen(QColor('#62748a'))
             painter.drawText(8, int(y)+4, f'{maximum*index/2:.1f}')
         previous = None
         painter.setPen(QPen(self.color, 2))
@@ -86,7 +86,7 @@ class HistoryChart(QWidget):
                 painter.drawLine(previous, point)
             painter.drawEllipse(point, 2.5, 2.5)
             previous = point
-        painter.setPen(QColor('#91a4bc'))
+        painter.setPen(QColor('#62748a'))
         painter.drawText(left, self.height()-12, datetime.fromtimestamp(first).strftime('%d.%m. %H:%M'))
         painter.drawText(max(left, right-110), self.height()-12,
                          datetime.fromtimestamp(last).strftime('%d.%m. %H:%M'))
@@ -143,8 +143,8 @@ class StatisticsDialog(QDialog):
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
         charts = QHBoxLayout()
-        self.online_chart = HistoryChart('Erreichbare Geräte pro Scan', '#57debf')
-        self.ping_chart = HistoryChart('Durchschnittlicher Ping pro Scan (ms)', '#84b6ff')
+        self.online_chart = HistoryChart('Erreichbare Geräte pro Scan', '#087f68')
+        self.ping_chart = HistoryChart('Durchschnittlicher Ping pro Scan (ms)', '#2563eb')
         charts.addWidget(self.online_chart)
         charts.addWidget(self.ping_chart)
         layout.addLayout(charts)

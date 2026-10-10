@@ -25,42 +25,42 @@ from PyQt6.QtWidgets import (
 GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/network-monitor-/netzwerkueberwachung?from=now-5m&to=now&timezone=browser&refresh=5s"
 
 STYLE = """
-QWidget { color: #dce6f0; font: 14px 'DejaVu Sans'; }
-QMainWindow, QDialog { background: #0c1320; }
+QWidget { color: #243247; font: 14px 'DejaVu Sans'; }
+QMainWindow, QDialog { background: #ffffff; }
 QLabel { background: transparent; }
-QLabel#title { font-size: 28px; font-weight: bold; color: #f5f9ff; }
-QLabel#muted { color: #91a4bc; }
-QWidget#toolbar { background: #162235; border: 1px solid #28394f; border-radius: 12px; }
-QLabel#summary { background: #142735; border: 1px solid #244451; border-radius: 10px;
-    padding: 14px 18px; color: #94e5d6; font-weight: bold; }
-QLineEdit, QSpinBox, QComboBox { background: #101c2d; border: 1px solid #384e68;
-    border-radius: 8px; padding: 10px; selection-background-color: #276e71; }
-QLineEdit:focus, QSpinBox:focus { border: 1px solid #4dd4bd; }
-QComboBox QAbstractItemView { background: #162337; color: #dce6f0;
-    selection-background-color: #254f64; border: 1px solid #384e68; }
-QPushButton { background: #23344b; border: 1px solid #384e68;
+QLabel#title { font-size: 28px; font-weight: bold; color: #17243a; }
+QLabel#muted { color: #62748a; }
+QWidget#toolbar { background: #f4f7fb; border: 1px solid #dce4ee; border-radius: 12px; }
+QLabel#summary { background: #edf8f5; border: 1px solid #c9e9de; border-radius: 10px;
+    padding: 14px 18px; color: #176a57; font-weight: bold; }
+QLineEdit, QSpinBox, QComboBox { background: #ffffff; border: 1px solid #cad5e3;
+    border-radius: 8px; padding: 10px; selection-background-color: #d7eee8; }
+QLineEdit:focus, QSpinBox:focus { border: 1px solid #16836c; }
+QComboBox QAbstractItemView { background: #f7f9fc; color: #243247;
+    selection-background-color: #dbeafe; border: 1px solid #cad5e3; }
+QPushButton { background: #e8eef5; border: 1px solid #cad5e3;
     border-radius: 8px; padding: 11px 18px; font-weight: bold; }
-QPushButton:hover { background: #30465f; border-color: #6a819d; }
-QPushButton:pressed { background: #182639; }
-QPushButton#scan { background: #57debf; color: #092c2c; border-color: #57debf; }
-QPushButton#scan:hover { background: #85ecd3; border-color: #85ecd3; }
-QPushButton#scan:pressed { background: #32bfa1; }
-QPushButton:disabled { background: #1a293d; color: #7f92ac; border-color: #28394f; }
-QTableWidget { background: #111d2e; alternate-background-color: #162337;
-    border: 1px solid #28394f; border-radius: 12px; gridline-color: #23344b;
-    selection-background-color: #254f64; selection-color: #ffffff; }
-QTableWidget::item { padding: 10px 12px; border-bottom: 1px solid #23344b; }
-QHeaderView::section { background: #1e2d43; color: #aebfd3; border: none;
+QPushButton:hover { background: #dde6f0; border-color: #a4b5ca; }
+QPushButton:pressed { background: #d3dfea; }
+QPushButton#scan { background: #087f68; color: #ffffff; border-color: #087f68; }
+QPushButton#scan:hover { background: #096b59; border-color: #096b59; }
+QPushButton#scan:pressed { background: #075647; }
+QPushButton:disabled { background: #edf1f6; color: #8190a3; border-color: #dce4ee; }
+QTableWidget { background: #ffffff; alternate-background-color: #f7f9fc;
+    border: 1px solid #dce4ee; border-radius: 12px; gridline-color: #e8eef5;
+    selection-background-color: #dbeafe; selection-color: #17243a; }
+QTableWidget::item { padding: 10px 12px; border-bottom: 1px solid #e8eef5; }
+QHeaderView::section { background: #edf2f8; color: #4b6078; border: none;
     padding: 14px 12px; font-weight: bold; }
-QTableCornerButton::section { background: #1e2d43; border: none; }
-QProgressBar { border: none; background: #1e3044; border-radius: 3px; }
-QProgressBar::chunk { background: #57debf; border-radius: 3px; }
-QScrollArea { background: #111d2e; border: 1px solid #28394f; border-radius: 10px; }
-QScrollArea > QWidget > QWidget { background: #111d2e; }
-QScrollBar:vertical { background: #111d2e; width: 10px; margin: 0; }
-QScrollBar::handle:vertical { background: #405570; border-radius: 5px; min-height: 24px; }
+QTableCornerButton::section { background: #edf2f8; border: none; }
+QProgressBar { border: none; background: #e1e9f2; border-radius: 3px; }
+QProgressBar::chunk { background: #087f68; border-radius: 3px; }
+QScrollArea { background: #ffffff; border: 1px solid #dce4ee; border-radius: 10px; }
+QScrollArea > QWidget > QWidget { background: #ffffff; }
+QScrollBar:vertical { background: #ffffff; width: 10px; margin: 0; }
+QScrollBar::handle:vertical { background: #b6c5d7; border-radius: 5px; min-height: 24px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QToolTip { background: #23344b; color: #f5f9ff; border: 1px solid #536984; padding: 6px; }
+QToolTip { background: #e8eef5; color: #17243a; border: 1px solid #cad5e3; padding: 6px; }
 """
 
 
@@ -341,7 +341,7 @@ class MonitorWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 item.setToolTip(value)
                 if column == 1:
-                    item.setForeground(QColor("#70e5c1" if device["online"] else "#f5b580"))
+                    item.setForeground(QColor("#13795b" if device["online"] else "#a45716"))
                 self.table.setItem(row, column, item)
 
 
