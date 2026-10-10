@@ -18,20 +18,42 @@ from PyQt6.QtWidgets import (
 )
 
 STYLE = """
-QWidget { background: #101827; color: #e5edf7; font: 14px 'Sans Serif'; }
-QLineEdit, QSpinBox { background: #1c293e; border: 1px solid #34445c; border-radius: 8px; padding: 10px; }
-QPushButton { background: #273751; border: none; border-radius: 8px; padding: 11px 18px; }
-QPushButton:hover { background: #364c6e; }
-QPushButton#scan { background: #2563eb; font-weight: bold; }
-QPushButton#scan:hover { background: #3b82f6; }
-QPushButton:disabled { background: #273751; color: #8896aa; }
-QTableWidget { background: #152035; alternate-background-color: #1c293e;
-    border: 1px solid #34445c; border-radius: 8px; gridline-color: #273751;
-    selection-background-color: #264e80; }
-QHeaderView::section { background: #23324a; border: none; padding: 12px; font-weight: bold; }
-QProgressBar { border: none; background: #23324a; border-radius: 3px; }
-QProgressBar::chunk { background: #3b82f6; }
+QWidget { color: #dce6f0; font: 14px 'DejaVu Sans'; }
+QMainWindow, QDialog { background: #0c1320; }
+QLabel { background: transparent; }
+QLabel#title { font-size: 28px; font-weight: bold; color: #f5f9ff; }
+QLabel#muted { color: #91a4bc; }
+QWidget#toolbar { background: #162235; border: 1px solid #28394f; border-radius: 12px; }
+QLabel#summary { background: #142735; border: 1px solid #244451; border-radius: 10px;
+    padding: 14px 18px; color: #94e5d6; font-weight: bold; }
+QLineEdit, QSpinBox { background: #101c2d; border: 1px solid #384e68;
+    border-radius: 8px; padding: 10px; selection-background-color: #276e71; }
+QLineEdit:focus, QSpinBox:focus { border: 1px solid #4dd4bd; }
+QPushButton { background: #23344b; border: 1px solid #384e68;
+    border-radius: 8px; padding: 11px 18px; font-weight: bold; }
+QPushButton:hover { background: #30465f; border-color: #6a819d; }
+QPushButton:pressed { background: #182639; }
+QPushButton#scan { background: #57debf; color: #092c2c; border-color: #57debf; }
+QPushButton#scan:hover { background: #85ecd3; border-color: #85ecd3; }
+QPushButton#scan:pressed { background: #32bfa1; }
+QPushButton:disabled { background: #1a293d; color: #7f92ac; border-color: #28394f; }
+QTableWidget { background: #111d2e; alternate-background-color: #162337;
+    border: 1px solid #28394f; border-radius: 12px; gridline-color: #23344b;
+    selection-background-color: #254f64; selection-color: #ffffff; }
+QTableWidget::item { padding: 10px 12px; border-bottom: 1px solid #23344b; }
+QHeaderView::section { background: #1e2d43; color: #aebfd3; border: none;
+    padding: 14px 12px; font-weight: bold; }
+QTableCornerButton::section { background: #1e2d43; border: none; }
+QProgressBar { border: none; background: #1e3044; border-radius: 3px; }
+QProgressBar::chunk { background: #57debf; border-radius: 3px; }
+QScrollArea { background: #111d2e; border: 1px solid #28394f; border-radius: 10px; }
+QScrollArea > QWidget > QWidget { background: #111d2e; }
+QScrollBar:vertical { background: #111d2e; width: 10px; margin: 0; }
+QScrollBar::handle:vertical { background: #405570; border-radius: 5px; min-height: 24px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QToolTip { background: #23344b; color: #f5f9ff; border: 1px solid #536984; padding: 6px; }
 """
+
 
 
 def read_devices(path):
@@ -78,10 +100,18 @@ class MonitorWindow(QMainWindow):
         self.resize(1400, 680)
         container = QWidget()
         layout = QVBoxLayout(container)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(18)
         title = QLabel("Netzwerk-Monitor")
-        title.setStyleSheet("font-size: 26px; font-weight: bold; padding: 12px 0;")
+        title.setObjectName("title")
         layout.addWidget(title)
-        scan_controls = QHBoxLayout()
+        subtitle = QLabel("Dein Netzwerk im Blick · Geräte anklicken für Details")
+        subtitle.setObjectName("muted")
+        layout.addWidget(subtitle)
+        toolbar = QWidget()
+        toolbar.setObjectName("toolbar")
+        scan_controls = QHBoxLayout(toolbar)
+        scan_controls.setContentsMargins(16, 14, 16, 14)
         scan_controls.setSpacing(12)
         self.scan_button = QPushButton("Scanning starten")
         self.scan_button.setObjectName("scan")
@@ -92,13 +122,14 @@ class MonitorWindow(QMainWindow):
         scan_controls.addWidget(button)
         self.network_label = QLabel("Netz: automatische Erkennung")
         self.network_label.setMinimumWidth(240)
+        self.network_label.setObjectName("muted")
         scan_controls.addWidget(self.network_label)
         scan_controls.addWidget(QLabel("Pause (Sekunden)"))
         self.scan_interval = QSpinBox()
         self.scan_interval.setRange(1, 86400)
         self.scan_interval.setValue(scan_interval)
         scan_controls.addWidget(self.scan_interval)
-        layout.addLayout(scan_controls)
+        layout.addWidget(toolbar)
         self.progress = QProgressBar()
         self.progress.setFixedHeight(6)
         self.progress.setRange(0, 100)
@@ -106,6 +137,7 @@ class MonitorWindow(QMainWindow):
         self.progress.setTextVisible(False)
         layout.addWidget(self.progress)
         self.summary = QLabel()
+        self.summary.setObjectName("summary")
         layout.addWidget(self.summary)
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels([
@@ -117,12 +149,15 @@ class MonitorWindow(QMainWindow):
         self.table.cellClicked.connect(self.open_device_details)
         self.table.setToolTip("Gerät anklicken, um alle Metadaten zu öffnen")
         self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().setDefaultSectionSize(48)
         self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
         self.message = QLabel()
         self.message.setWordWrap(True)
+        self.message.setObjectName("muted")
         layout.addWidget(self.message)
         self.setCentralWidget(container)
         self.timer = QTimer(self)
@@ -277,7 +312,7 @@ class MonitorWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 item.setToolTip(value)
                 if column == 1:
-                    item.setForeground(QColor("#5ee4a3" if device["online"] else "#fca5a5"))
+                    item.setForeground(QColor("#70e5c1" if device["online"] else "#f5b580"))
                 self.table.setItem(row, column, item)
 
 
@@ -293,15 +328,19 @@ class DeviceDetailsDialog(QDialog):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("Gerätedetails · " + device["ip"])
-        self.resize(620, 560)
+        self.resize(680, 600)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
         title = QLabel("Gerätedetails")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; padding: 10px 0;")
+        title.setObjectName("title")
         layout.addWidget(title)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
         form = QFormLayout(content)
+        form.setContentsMargins(20, 20, 20, 20)
+        form.setVerticalSpacing(18)
         self.labels = {}
         self.fields = self.FIELDS + [(key, key) for key in device
                                     if key not in dict(self.FIELDS) and key != "detail_error"]
