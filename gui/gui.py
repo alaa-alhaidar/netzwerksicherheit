@@ -14,13 +14,15 @@ try:
 except ImportError:
     from stats_view import StatisticsDialog
 
-from PyQt6.QtCore import QProcess, Qt, QTimer
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QProcess, Qt, QTimer, QUrl
+from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication, QAbstractItemView, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
     QProgressBar, QScrollArea, QSpinBox, QVBoxLayout, QHBoxLayout, QWidget,
 )
+
+GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/network-monitor-/netzwerkueberwachung?from=now-5m&to=now&timezone=browser&refresh=5s"
 
 STYLE = """
 QWidget { color: #dce6f0; font: 14px 'DejaVu Sans'; }
@@ -131,6 +133,9 @@ class MonitorWindow(QMainWindow):
         self.stats_button = QPushButton("Statistik")
         self.stats_button.clicked.connect(self.open_statistics)
         scan_controls.addWidget(self.stats_button)
+        self.grafana_button = QPushButton("Grafana")
+        self.grafana_button.clicked.connect(self.open_grafana)
+        scan_controls.addWidget(self.grafana_button)
         self.network_label = QLabel("Netz: automatische Erkennung")
         self.network_label.setMinimumWidth(240)
         self.network_label.setObjectName("muted")
@@ -176,6 +181,10 @@ class MonitorWindow(QMainWindow):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(interval * 1000)
         self.refresh()
+
+    def open_grafana(self):
+        if not QDesktopServices.openUrl(QUrl(GRAFANA_URL)):
+            self.message.setText("Grafana konnte nicht im Browser geöffnet werden.")
 
     def open_statistics(self):
         if self.statistics_window is None:

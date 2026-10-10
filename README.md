@@ -218,3 +218,11 @@ in tatsächlich gescannten Netzen gehen in die Erreichbarkeitsquote ein. Die Quo
 ist ein Anteil von Erkennungen, keine zeitbasierte Uptime. Fehlende Pingantworten
 und obere Grenzen wie `<1 ms` werden nicht in Pingdurchschnitte einbezogen.
 Die Historie bleibt in SQLite erhalten und wächst mit der Zahl der Scans.
+
+## Grafana
+
+Der Button **Grafana** öffnet das konfigurierte Dashboard im Standardbrowser:
+[Netzwerküberwachung](https://breezycaribou3208.grafana.net/d/network-monitor-/netzwerkueberwachung?from=now-5m&to=now&timezone=browser&refresh=5s).
+Der Link verwendet die letzten fünf Minuten und aktualisiert alle fünf Sekunden.
+Eine Grafana-Anmeldung kann erforderlich sein. Dieser Button überträgt keine
+Scanner-Messwerte an Grafana; dafür muss eine Datenquelle eingerichtet werden.
