@@ -1,7 +1,0 @@
-FROM python:3.13-slim
-WORKDIR /app
-COPY scanner/requirements-postgres.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-COPY scanner/sync_postgres.py /app/sync_postgres.py
-ENV PYTHONUNBUFFERED=1 MONITOR_DB=/data/monitor.sqlite3
-CMD ["python", "sync_postgres.py"]

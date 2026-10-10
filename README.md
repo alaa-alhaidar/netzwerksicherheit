@@ -226,9 +226,3 @@ Der Button **Grafana** öffnet das konfigurierte Dashboard im Standardbrowser:
 Der Link verwendet die letzten fünf Minuten und aktualisiert alle fünf Sekunden.
 Eine Grafana-Anmeldung kann erforderlich sein. Dieser Button überträgt keine
 Scanner-Messwerte an Grafana; dafür muss eine Datenquelle eingerichtet werden.
-
-## PostgreSQL und Grafana Cloud
-
-PostgreSQL, automatische SQLite-Spiegelung und ein Grafana-Lesebenutzer sind
-vorbereitet. Einrichtung und Cloud-Verbindung: [grafana/README.md](grafana/README.md).
-SQL für die Dashboard-Panels: [grafana/queries.sql](grafana/queries.sql).
