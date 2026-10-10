@@ -1,0 +1,9 @@
+services:
+  pdc:
+    image: grafana/pdc-agent:latest
+    network_mode: host
+    env_file: .env.pdc
+    entrypoint: [/bin/sh, -c]
+    command:
+      - 'exec /usr/bin/pdc -token "$$GCLOUD_PDC_SIGNING_TOKEN" -cluster "$$GCLOUD_PDC_CLUSTER" -gcloud-hosted-grafana-id "$$GCLOUD_HOSTED_GRAFANA_ID" -ssh-flag="-o PermitRemoteOpen=127.0.0.1:5432"'
+    restart: unless-stopped
