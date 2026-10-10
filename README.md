@@ -117,8 +117,7 @@ erhalten. Die Netzbereiche werden vor jedem Scan neu ermittelt.
 
 Geräte, die Nmaps Erkennungsproben blockieren, können als offline erscheinen. Unbekannte,
 unerreichbare Adressen werden nicht gespeichert. Nach einem Scannerstopp bleiben
-die letzten Statuswerte bestehen. Herstellererkennung, Benachrichtigungen
-und historische Auswertungen sind noch nicht enthalten.
+die letzten Statuswerte bestehen. Herstellererkennung und Benachrichtigungen sind noch nicht enthalten.
 
 Für eine Datenbanksicherung den Scanner stoppen und das gesamte Verzeichnis
 `data/` kopieren. Datenbank und lokale Konfiguration sind von Git ausgeschlossen.
@@ -195,3 +194,27 @@ erst beim Klick auf ein Gerät im Hintergrund. Dienste erscheinen ausschließlic
 im Detailfenster. Währenddessen steht dort „Dienste werden abgefragt …“.
 Beim erneuten Öffnen werden die Dienste neu geprüft; Schließen beendet die Abfrage.
 # network-monitor-
+
+## Statistik
+
+Der Button **Statistik** öffnet ein eigenes Fenster mit:
+
+- aktuellen Zahlen für bekannte, online und offline gemeldete Geräte;
+- zuletzt gefundenen offenen TCP-Diensten und Zeitpunkt der Abfrage;
+- Verlauf der erreichbaren Geräte und des durchschnittlichen Pings pro Scan;
+- Erreichbarkeitsquote und durchschnittlichem Ping je Gerät.
+
+Der Zeitraum ist wählbar: eine Stunde, 24 Stunden, sieben oder 30 Tage.
+Kurven zeigen höchstens die letzten 400 Scans im Zeitraum; die Gerätetabelle
+wertet alle gespeicherten Messungen des Zeitraums aus. Aktualisierung alle fünf
+Sekunden. Die aktuellen Geräte- und Dienstzahlen sind vom Zeitraum unabhängig.
+Dienste werden weiterhin ausschließlich beim Klick auf ein Gerät gescannt;
+die Statistik verwendet die letzte erfolgreiche gespeicherte Abfrage.
+
+Verlaufsdaten entstehen erst ab dem ersten Scan dieser Version; alte Werte
+werden nicht nachträglich erfunden. Bestehende Datenbanken werden automatisch
+erweitert. Fehlgeschlagene Geräteerkennung erzeugt keine Messungen. Nur Geräte
+in tatsächlich gescannten Netzen gehen in die Erreichbarkeitsquote ein. Die Quote
+ist ein Anteil von Erkennungen, keine zeitbasierte Uptime. Fehlende Pingantworten
+und obere Grenzen wie `<1 ms` werden nicht in Pingdurchschnitte einbezogen.
+Die Historie bleibt in SQLite erhalten und wächst mit der Zahl der Scans.

@@ -9,6 +9,11 @@ from pathlib import Path
 import sqlite3
 import sys
 
+try:
+    from .stats_view import StatisticsDialog
+except ImportError:
+    from stats_view import StatisticsDialog
+
 from PyQt6.QtCore import QProcess, Qt, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
@@ -26,9 +31,11 @@ QLabel#muted { color: #91a4bc; }
 QWidget#toolbar { background: #162235; border: 1px solid #28394f; border-radius: 12px; }
 QLabel#summary { background: #142735; border: 1px solid #244451; border-radius: 10px;
     padding: 14px 18px; color: #94e5d6; font-weight: bold; }
-QLineEdit, QSpinBox { background: #101c2d; border: 1px solid #384e68;
+QLineEdit, QSpinBox, QComboBox { background: #101c2d; border: 1px solid #384e68;
     border-radius: 8px; padding: 10px; selection-background-color: #276e71; }
 QLineEdit:focus, QSpinBox:focus { border: 1px solid #4dd4bd; }
+QComboBox QAbstractItemView { background: #162337; color: #dce6f0;
+    selection-background-color: #254f64; border: 1px solid #384e68; }
 QPushButton { background: #23344b; border: 1px solid #384e68;
     border-radius: 8px; padding: 11px 18px; font-weight: bold; }
 QPushButton:hover { background: #30465f; border-color: #6a819d; }
@@ -84,6 +91,7 @@ class MonitorWindow(QMainWindow):
         self.db_path = str(Path(db_path).resolve())
         self.devices = []
         self.detail_windows = {}
+        self.statistics_window = None
         self.network_override = network
         self.scanning = False
         self.scan_timer = QTimer(self)
@@ -120,6 +128,9 @@ class MonitorWindow(QMainWindow):
         button = QPushButton("Ansicht aktualisieren")
         button.clicked.connect(self.refresh)
         scan_controls.addWidget(button)
+        self.stats_button = QPushButton("Statistik")
+        self.stats_button.clicked.connect(self.open_statistics)
+        scan_controls.addWidget(self.stats_button)
         self.network_label = QLabel("Netz: automatische Erkennung")
         self.network_label.setMinimumWidth(240)
         self.network_label.setObjectName("muted")
@@ -165,6 +176,13 @@ class MonitorWindow(QMainWindow):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(interval * 1000)
         self.refresh()
+
+    def open_statistics(self):
+        if self.statistics_window is None:
+            self.statistics_window = StatisticsDialog(self.db_path, self)
+        self.statistics_window.show()
+        self.statistics_window.raise_()
+        self.statistics_window.activateWindow()
 
     def open_device_details(self, row, column):
         item = self.table.item(row, 0)
@@ -270,6 +288,8 @@ class MonitorWindow(QMainWindow):
             event.ignore()
             return
         event.accept()
+        if self.statistics_window is not None:
+            self.statistics_window.close()
         for dialog in list(self.detail_windows.values()):
             dialog.close()
 
@@ -370,7 +390,8 @@ class DeviceDetailsDialog(QDialog):
         self.port_process.finished.connect(self.ports_finished)
         self.port_process.errorOccurred.connect(self.ports_error)
         script = Path(__file__).resolve().parents[1] / "scanner" / "netz_monitor.py"
-        self.port_process.start(sys.executable, [str(script), "--ports-ip", device["ip"]])
+        self.port_process.start(sys.executable, [str(script), "--ports-ip", device["ip"],
+                                               "--db", parent.db_path])
 
     def ports_finished(self, exit_code, exit_status):
         try:

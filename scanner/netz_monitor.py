@@ -34,6 +34,16 @@ def database(path):
     for column in ("hostname", "mac", "ping", "services", "detail_error"):
         if column not in columns:
             db.execute(f"ALTER TABLE devices ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+    db.execute("""CREATE TABLE IF NOT EXISTS scans (
+        id INTEGER PRIMARY KEY, checked TEXT NOT NULL, networks TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS scans_checked ON scans(checked)")
+    db.execute("""CREATE TABLE IF NOT EXISTS observations (
+        scan_id INTEGER NOT NULL, ip TEXT NOT NULL, online INTEGER NOT NULL,
+        ping_ms REAL, ping_upper_bound INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(scan_id, ip))""")
+    db.execute("CREATE INDEX IF NOT EXISTS observations_ip ON observations(ip, scan_id)")
+    db.execute("""CREATE TABLE IF NOT EXISTS service_checks (
+        ip TEXT PRIMARY KEY, checked TEXT NOT NULL, ports TEXT NOT NULL)""")
     db.commit()
     return db
 
@@ -175,6 +185,8 @@ def scan(db, network=NETWORK, timeout=300):
     checked = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # Persist discovery before collecting details, so Qt can show all hosts first.
     with db:
+        scan_id = db.execute("INSERT INTO scans (checked, networks) VALUES (?, ?)",
+                             (checked, ", ".join(map(str, networks)))).lastrowid
         for (ip,) in db.execute("SELECT ip FROM devices").fetchall():
             if str(network) == "auto" or any(ipaddress.IPv4Address(ip) in detected for detected in networks):
                 db.execute("UPDATE devices SET online=0, last_checked=? WHERE ip=?", (checked, ip))
@@ -185,11 +197,21 @@ def scan(db, network=NETWORK, timeout=300):
                 (ip, checked, checked, checked))
             db.execute("""UPDATE devices SET hostname='', mac='', ping='',
                 detail_error='' WHERE ip=?""", (ip,))
+        for ip, online in db.execute("SELECT ip, online FROM devices").fetchall():
+            # Only the discovered subnets count as measured, especially after a network change.
+            if any(ipaddress.IPv4Address(ip) in detected for detected in networks):
+                db.execute("INSERT INTO observations (scan_id, ip, online) VALUES (?, ?, ?)",
+                           (scan_id, ip, online))
     for ip in devices:
         info = get_device_info(ip, timeout)
         with db:
             db.execute("""UPDATE devices SET hostname=:hostname, mac=:mac,
                 ping=:ping, detail_error=:detail_error WHERE ip=:ip""", info)
+            match = re.fullmatch(r"(<)?(\d+(?:\.\d+)?) ms", info["ping"])
+            if match:
+                db.execute("""UPDATE observations SET ping_ms=?, ping_upper_bound=?
+                    WHERE scan_id=? AND ip=?""",
+                    (float(match.group(2)), int(bool(match.group(1))), scan_id, ip))
     print(f"\n{'=' * 65}\nScan abgeschlossen: {len(devices)} Geräte gefunden.", flush=True)
 
 
@@ -213,6 +235,9 @@ def main():
             if args.timeout < 1:
                 raise ValueError("Zeitlimit muss positiv sein")
             ports = scan_ports(ip, args.timeout)
+            with database(args.db) as db:
+                db.execute("INSERT OR REPLACE INTO service_checks VALUES (?, ?, ?)",
+                           (ip, datetime.now(timezone.utc).isoformat(timespec="seconds"), json.dumps(ports)))
             print(json.dumps({"services": ", ".join(ports) if ports else "keine getesteten Ports offen"}))
             return 0
         except (ValueError, OSError, subprocess.SubprocessError) as exc:
