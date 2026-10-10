@@ -1,0 +1,15 @@
+services:
+  scanner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["python", "scanner/netz_monitor.py"]
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    environment:
+      NETWORK_CIDR: ${NETWORK_CIDR:-auto}
+      SCAN_INTERVAL: ${SCAN_INTERVAL:-60}
+    volumes:
+      - ../data:/data
+    restart: unless-stopped
