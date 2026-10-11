@@ -226,3 +226,9 @@ Der Button **Grafana** öffnet das konfigurierte Dashboard im Standardbrowser:
 Der Link verwendet die letzten fünf Minuten und aktualisiert alle fünf Sekunden.
 Eine Grafana-Anmeldung kann erforderlich sein. Dieser Button überträgt keine
 Scanner-Messwerte an Grafana; dafür muss eine Datenquelle eingerichtet werden.
+
+## Grafana Cloud und bestehendes PostgreSQL
+
+Die erhaltene Datenbank `networkdb` kann jetzt für Grafana Cloud verwendet werden.
+Die lokale Synchronisierung und PDC-Konfiguration stehen in
+[dieser Anleitung](grafana/README.md). Cloud-Zugangsdaten bleiben lokal.

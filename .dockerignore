@@ -1,0 +1,10 @@
+.git
+.agents
+.aws
+.codex
+data
+.venv
+**/__pycache__
+**/*.pyc
+docker/.env*
+docker/bootstrap-cloud.sql

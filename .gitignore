@@ -3,3 +3,6 @@ __pycache__/
 data/
 docker/.env
 .venv/
+docker/.env.cloud
+docker/.env.pdc
+docker/bootstrap-cloud.sql
