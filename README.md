@@ -251,4 +251,11 @@ Start wird die zuletzt gespeicherte Darstellung geladen. Die Datei bleibt lokal.
 Im Detailfenster eines Geräts lässt sich „Als kritisches Gerät markieren“ aktivieren
 oder entfernen. Die Änderung wird sofort gespeichert und in Liste und Karten als
 „★ Kritisch“ angezeigt. Die Markierung bleibt nach einem Neustart erhalten und ist
-an die IP-Adresse gebunden. Sie löst noch keine Benachrichtigungen oder Neustarts aus.
+an die IP-Adresse gebunden. Automatische Neustarts werden dadurch nicht ausgelöst.
+
+Ist ein kritisches Gerät offline, erscheint sofort nach der Erkennung in der
+Oberfläche ein Warn-Popup mit Hostname und IP-Adresse. Der Scan läuft dabei weiter.
+Pro Ausfall erscheint die Meldung einmal; nach erneuter Erreichbarkeit wird sie für
+den nächsten Ausfall wieder aktiviert. Auch beim Markieren eines bereits offline
+angezeigten Geräts erscheint die Warnung. Das Popup schließt sich, wenn das Gerät
+wieder online ist oder die Markierung entfernt wird.

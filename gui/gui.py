@@ -19,7 +19,7 @@ from PyQt6.QtCore import QProcess, QSettings, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
-    QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
+    QMainWindow, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
     QListWidget, QListWidgetItem, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
 
@@ -166,6 +166,8 @@ class MonitorWindow(QMainWindow):
         self.appearance_window = None
         self.card_buttons = {}
         self.detail_windows = {}
+        self.offline_alerted = set()
+        self.offline_popups = {}
         self.statistics_window = None
         self.network_override = network
         self.scanning = False
@@ -344,6 +346,34 @@ class MonitorWindow(QMainWindow):
         self.settings.setValue(f"devices/{ip}/critical", bool(critical))
         self.settings.sync()
         self.render()
+        self.check_critical_devices()
+
+    def check_critical_devices(self):
+        offline = {device["ip"]: device for device in self.devices
+                   if self.is_critical(device["ip"]) and not device["online"]}
+        for ip in list(self.offline_popups):
+            if ip not in offline:
+                self.offline_popups[ip].close()
+        self.offline_alerted.intersection_update(offline)
+        for ip, device in offline.items():
+            if ip in self.offline_alerted:
+                continue
+            self.offline_alerted.add(ip)
+            popup = QMessageBox(self)
+            popup.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            popup.setWindowTitle("Kritisches Gerät offline")
+            popup.setIcon(QMessageBox.Icon.Warning)
+            popup.setTextFormat(Qt.TextFormat.PlainText)
+            name = device.get("hostname") or "Unbekanntes Gerät"
+            popup.setText(f"Das kritische Gerät {name} ({ip}) ist offline.")
+            popup.setInformativeText("Das Gerät wurde beim letzten Scan nicht erreicht.")
+            popup.setStandardButtons(QMessageBox.StandardButton.Ok)
+            popup.setWindowModality(Qt.WindowModality.NonModal)
+            self.offline_popups[ip] = popup
+            popup.finished.connect(lambda result, ip=ip: self.offline_popups.pop(ip, None))
+            popup.show()
+            popup.raise_()
+            popup.activateWindow()
 
     def toggle_scanning(self):
         if self.scanning:
@@ -440,6 +470,8 @@ class MonitorWindow(QMainWindow):
             self.statistics_window.close()
         for dialog in list(self.detail_windows.values()):
             dialog.close()
+        for popup in list(self.offline_popups.values()):
+            popup.close()
 
     def stop_scan(self):
         if self.process.state() != QProcess.ProcessState.NotRunning:
@@ -457,6 +489,7 @@ class MonitorWindow(QMainWindow):
             if dialog is not None:
                 dialog.update_device(device)
         self.render()
+        self.check_critical_devices()
         if self.process.state() != QProcess.ProcessState.NotRunning or self.scanning:
             return
         if not devices:
