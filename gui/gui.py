@@ -348,17 +348,25 @@ class MonitorWindow(QMainWindow):
         self.render()
         self.check_critical_devices()
 
-    def check_critical_devices(self):
+    def check_critical_devices(self, repeat=False):
         offline = {device["ip"]: device for device in self.devices
                    if self.is_critical(device["ip"]) and not device["online"]}
         for ip in list(self.offline_popups):
             if ip not in offline:
                 self.offline_popups[ip].close()
         self.offline_alerted.intersection_update(offline)
+        if repeat:
+            self.offline_alerted.clear()
         for ip, device in offline.items():
             if ip in self.offline_alerted:
                 continue
             self.offline_alerted.add(ip)
+            if ip in self.offline_popups:
+                popup = self.offline_popups[ip]
+                popup.showNormal()
+                popup.raise_()
+                popup.activateWindow()
+                continue
             popup = QMessageBox(self)
             popup.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             popup.setWindowTitle("Kritisches Gerät offline")
@@ -441,6 +449,7 @@ class MonitorWindow(QMainWindow):
             return
         self.schedule_scan()
         if exit_code == 0 and exit_status == QProcess.ExitStatus.NormalExit:
+            self.check_critical_devices(repeat=True)
             self.message.setText(f"Scan abgeschlossen · nächster Scan in {self.scan_interval.value()} Sekunden")
         else:
             self.message.setText("Scan fehlgeschlagen: " + (self.scan_log.strip().splitlines()[-1]

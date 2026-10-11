@@ -255,7 +255,8 @@ an die IP-Adresse gebunden. Automatische Neustarts werden dadurch nicht ausgelö
 
 Ist ein kritisches Gerät offline, erscheint sofort nach der Erkennung in der
 Oberfläche ein Warn-Popup mit Hostname und IP-Adresse. Der Scan läuft dabei weiter.
-Pro Ausfall erscheint die Meldung einmal; nach erneuter Erreichbarkeit wird sie für
-den nächsten Ausfall wieder aktiviert. Auch beim Markieren eines bereits offline
+Nach jedem erfolgreich abgeschlossenen Scan erscheint die Warnung erneut, solange
+das Gerät offline bleibt. Ein noch offenes Popup wird wieder in den Vordergrund
+geholt; bereits bestätigte Warnungen werden erneut geöffnet. Auch beim Markieren eines bereits offline
 angezeigten Geräts erscheint die Warnung. Das Popup schließt sich, wenn das Gerät
 wieder online ist oder die Markierung entfernt wird.
