@@ -222,7 +222,7 @@ Die Historie bleibt in SQLite erhalten und wächst mit der Zahl der Scans.
 ## Grafana
 
 Der Button **Grafana** öffnet das konfigurierte Dashboard im Standardbrowser:
-[Netzwerküberwachung](https://breezycaribou3208.grafana.net/d/network-monitor-/netzwerkueberwachung?from=now-5m&to=now&timezone=browser&refresh=5s).
+[Netzwerküberwachung](https://breezycaribou3208.grafana.net/d/almljvn/netzwerkueberwachung-e28093-pi-5?from=now-5m&to=now&timezone=browser&refresh=5s).
 Der Link verwendet die letzten fünf Minuten und aktualisiert alle fünf Sekunden.
 Eine Grafana-Anmeldung kann erforderlich sein. Dieser Button überträgt keine
 Scanner-Messwerte an Grafana; dafür muss eine Datenquelle eingerichtet werden.
