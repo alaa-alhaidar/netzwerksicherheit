@@ -14,12 +14,6 @@ import sqlite3
 import subprocess
 import sys
 import time
-import xml.etree.ElementTree as ET
-
-try:
-    from .fritz_router import FritzHosts, load_config
-except ImportError:
-    from fritz_router import FritzHosts, load_config
 
 NETWORK = "auto"
 COMMON_PORTS = {
@@ -37,7 +31,7 @@ def database(path):
         first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
         last_checked TEXT NOT NULL)""")
     columns = {row[1] for row in db.execute("PRAGMA table_info(devices)")}
-    for column in ("hostname", "mac", "ping", "services", "detail_error", "connection_info", "router_info"):
+    for column in ("hostname", "mac", "ping", "services", "detail_error", "connection_info"):
         if column not in columns:
             db.execute(f"ALTER TABLE devices ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
     db.execute("""CREATE TABLE IF NOT EXISTS scans (
@@ -257,20 +251,6 @@ def scan(db, network=NETWORK, timeout=300):
         with db:
             db.execute("UPDATE devices SET connection_info=? WHERE ip=?",
                        (json.dumps(connection), ip))
-    # Optional router lookup runs after discovery/ping so critical alerts are not delayed.
-    config = load_config(db.execute("PRAGMA database_list").fetchone()[2])
-    if config.get("enabled"):
-        try:
-            router = FritzHosts(config)
-            for (ip,) in db.execute("SELECT ip FROM devices").fetchall():
-                if not any(ipaddress.IPv4Address(ip) in detected for detected in networks):
-                    continue
-                router_info = router.host_info(ip)
-                with db:
-                    db.execute("UPDATE devices SET router_info=? WHERE ip=?", (json.dumps(router_info), ip))
-                print(f"Router-Anschluss aktualisiert: {ip}", flush=True)
-        except (OSError, ValueError, KeyError, ET.ParseError):
-            print("FRITZ!Box-Abfrage fehlgeschlagen. Anmeldung und Router-Einstellungen prüfen.", flush=True)
     print(f"\n{'=' * 65}\nScan abgeschlossen: {len(devices)} Geräte gefunden.", flush=True)
 
 

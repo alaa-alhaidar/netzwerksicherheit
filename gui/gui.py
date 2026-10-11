@@ -10,9 +10,6 @@ from pathlib import Path
 import sqlite3
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scanner.fritz_router import load_config, save_config
-
 try:
     from .stats_view import StatisticsDialog
 except ImportError:
@@ -127,61 +124,12 @@ class AppearanceDialog(QDialog):
         note = QLabel("Änderungen werden sofort angewendet und gespeichert.")
         note.setWordWrap(True)
         layout.addWidget(note)
-        router = QPushButton("FRITZ!Box einrichten")
-        router.clicked.connect(parent.open_router_settings)
-        layout.addWidget(router)
         close = QPushButton("Schließen")
         close.clicked.connect(self.close)
         layout.addWidget(close)
 
     def apply(self):
         self.parent().apply_appearance(self.view.currentData(), self.theme.currentData())
-
-
-class RouterSettingsDialog(QDialog):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setWindowTitle("FRITZ!Box-Anmeldung")
-        self.resize(520, 360)
-        config = load_config(parent.db_path)
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        self.enabled = QCheckBox("Geräteanschlüsse vom Router abfragen")
-        self.enabled.setChecked(bool(config.get("enabled")))
-        form.addRow(self.enabled)
-        self.host = QLineEdit(config.get("host", "192.168.178.1"))
-        form.addRow("Router-IP", self.host)
-        self.username = QLineEdit(config.get("username", ""))
-        form.addRow("FRITZ!Box-Benutzer", self.username)
-        self.password = QLineEdit(config.get("password", ""))
-        self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("Passwort", self.password)
-        layout.addLayout(form)
-        note = QLabel("Zugriff für Anwendungen muss im Router aktiviert sein. "
-                      "Die Zugangsdaten werden lokal in router.json gespeichert "
-                      "(nur für deinen Benutzer lesbar), nicht zu GitHub übertragen. "
-                      "Die Abfrage erfolgt beim nächsten Scan.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        self.message = QLabel()
-        self.message.setWordWrap(True)
-        layout.addWidget(self.message)
-        save = QPushButton("Speichern")
-        save.clicked.connect(self.save)
-        layout.addWidget(save)
-        close = QPushButton("Schließen")
-        close.clicked.connect(self.close)
-        layout.addWidget(close)
-
-    def save(self):
-        try:
-            save_config(self.parent().db_path, {"enabled": self.enabled.isChecked(),
-                        "host": self.host.text().strip(), "username": self.username.text().strip(),
-                        "password": self.password.text()})
-        except (OSError, ValueError) as exc:
-            self.message.setText("Speichern fehlgeschlagen: " + str(exc))
-            return
-        self.message.setText("Gespeichert. Die Router-Daten werden beim nächsten Scan abgefragt.")
 
 
 
@@ -215,20 +163,12 @@ def connection_info(device):
         return {}
 
 
-def router_info(device):
-    try:
-        info = json.loads(device.get("router_info") or "{}")
-        return info if isinstance(info, dict) else {}
-    except (ValueError, TypeError):
-        return {}
-
-
 class ConnectionDialog(QDialog):
     def __init__(self, device, parent):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("Anschlussdetails · " + device["ip"])
-        self.resize(620, 720)
+        self.resize(540, 540)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         title = QLabel("Netzwerkanschluss")
@@ -240,13 +180,7 @@ class ConnectionDialog(QDialog):
         form.setContentsMargins(20, 20, 20, 20)
         form.setVerticalSpacing(14)
         self.labels = {}
-        for key, caption in [("target", "Gerät"), ("device_type", "Netztyp des Geräts"),
-                             ("router", "Quelle: FRITZ!Box"), ("router_mac", "Geräte-MAC laut Router"),
-                             ("router_port", "Anschluss laut Router"), ("router_checked", "Router-Abfrage"),
-                             ("router_hostname", "Hostname laut Router"),
-                             ("router_active", "Status laut Router"),
-                             ("router_speed", "Geschwindigkeit laut Router (Mbit/s)"),
-                             ("type", "Netztyp des Pi"),
+        for key, caption in [("target", "Gerät"), ("type", "Netztyp"),
                              ("interface", "Pi-Schnittstelle"), ("local_ip", "Lokale IP"),
                              ("network", "Lokales Netz"), ("gateway", "Gateway zum Gerät"),
                              ("mac", "Lokale MAC"), ("state", "Anschlussstatus"),
@@ -257,14 +191,10 @@ class ConnectionDialog(QDialog):
             label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.labels[key] = label
             form.addRow(caption + ":", label)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(card)
-        layout.addWidget(scroll)
-        note = QLabel("Der Geräteanschluss stammt aus der FRITZ!Box-Abfrage. "
-                      "Darunter steht der lokale Anschluss des Pi. "
-                      "Die Zeitangaben zeigen, wie aktuell die Daten sind; "
-                      "ohne Router-Daten bleibt der Geräteanschluss unbekannt.")
+        layout.addWidget(card)
+        note = QLabel("Zeigt den Anschluss des Pi zum Gerät. Die Verbindung des Geräts "
+                      "selbst (WLAN oder Kabel) ist damit nicht bestimmt. "
+                      "Bei Offline-Geräten können die Angaben aus einem älteren Scan stammen.")
         note.setWordWrap(True)
         layout.addWidget(note)
         close = QPushButton("Schließen")
@@ -274,16 +204,10 @@ class ConnectionDialog(QDialog):
 
     def update_device(self, device):
         info = connection_info(device)
-        router = router_info(device)
-        info.update(device_type=router.get("type"), router=router.get("router"),
-                    router_mac=router.get("mac"), router_port=router.get("port"),
-                    router_checked=router.get("checked"), router_hostname=router.get("hostname"),
-                    router_speed=router.get("speed"),
-                    router_active={"1": "Online", "0": "Offline"}.get(router.get("active")))
         info["target"] = device["ip"]
         for key, label in self.labels.items():
             value = info.get(key)
-            if key in ("checked", "router_checked") and value:
+            if key == "checked" and value:
                 value = local_time(value)
             elif key == "gateway" and info.get("interface") and not value:
                 value = "Direkt verbunden"
@@ -299,7 +223,6 @@ class MonitorWindow(QMainWindow):
         self.view_mode = self.settings.value("appearance/view", "list")
         self.theme_mode = self.settings.value("appearance/theme", "light")
         self.appearance_window = None
-        self.router_settings_window = None
         self.card_buttons = {}
         self.detail_windows = {}
         self.connection_windows = {}
@@ -375,7 +298,7 @@ class MonitorWindow(QMainWindow):
         self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels([
             "IP-Adresse", "Status", "Zuletzt erreichbar", "Zuletzt geprüft",
-            "Hostname", "MAC", "Ping", "Kritisch", "Netztyp",
+            "Hostname", "MAC", "Ping", "Kritisch", "Netztyp (Pi)",
         ])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -425,13 +348,6 @@ class MonitorWindow(QMainWindow):
         self.appearance_window.show()
         self.appearance_window.raise_()
         self.appearance_window.activateWindow()
-
-    def open_router_settings(self):
-        if self.router_settings_window is None:
-            self.router_settings_window = RouterSettingsDialog(self)
-        self.router_settings_window.show()
-        self.router_settings_window.raise_()
-        self.router_settings_window.activateWindow()
 
     def apply_appearance(self, view, theme):
         self.view_mode = view if view in ("list", "cards") else "list"
@@ -635,8 +551,6 @@ class MonitorWindow(QMainWindow):
         event.accept()
         if self.appearance_window is not None:
             self.appearance_window.close()
-        if self.router_settings_window is not None:
-            self.router_settings_window.close()
         if self.statistics_window is not None:
             self.statistics_window.close()
         for dialog in list(self.detail_windows.values()):
@@ -686,13 +600,13 @@ class MonitorWindow(QMainWindow):
                       device.get("hostname") or "unbekannt", device.get("mac") or "unbekannt",
                       device.get("ping") or "unbekannt",
                       "★ Kritisch" if self.is_critical(device["ip"]) else "—",
-                      router_info(device).get("type") or "Unbekannt"]
+                      connection_info(device).get("type") or "Unbekannt"]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.ItemDataRole.UserRole, bool(device["online"]))
                 item.setToolTip(value)
                 if column == 8:
-                    item.setToolTip("Geräteanschluss laut FRITZ!Box und lokale Anschlussdetails öffnen")
+                    item.setToolTip("Anschlussdetails des Pi öffnen")
                 if column == 1:
                     item.setForeground(status_color(device["online"], self.theme_mode))
                 self.table.setItem(row, column, item)
@@ -723,7 +637,7 @@ class MonitorWindow(QMainWindow):
             status = "● Online" if device["online"] else "○ Offline"
             if self.is_critical(device["ip"]):
                 status += " · ★ Kritisch"
-            kind = router_info(device).get("type") or "Netztyp unbekannt"
+            kind = connection_info(device).get("type") or "Netztyp unbekannt"
             button.setText(f"{name}\n{device['ip']} · {kind}\n\n{status}   ·   Ping: {device.get('ping') or '—'}\n{device.get('mac') or 'MAC unbekannt'}")
             button.setToolTip("Gerätedetails öffnen: " + device["ip"])
 
@@ -761,7 +675,7 @@ class DeviceDetailsDialog(QDialog):
         form.addRow("Überwachung:", self.critical_checkbox)
         self.labels = {}
         self.fields = self.FIELDS + [(key, key) for key in device
-                                    if key not in dict(self.FIELDS) and key not in ("detail_error", "connection_info", "router_info")]
+                                    if key not in dict(self.FIELDS) and key not in ("detail_error", "connection_info")]
         for key, caption in self.fields:
             label = QLabel()
             label.setTextFormat(Qt.TextFormat.PlainText)
