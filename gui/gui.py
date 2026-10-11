@@ -16,10 +16,10 @@ except ImportError:
     from stats_view import StatisticsDialog
 
 from PyQt6.QtCore import QProcess, QSettings, QSize, Qt, QTimer, QUrl
-from PyQt6.QtGui import QColor, QDesktopServices, QPen
+from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
-    QMainWindow, QPushButton, QStyledItemDelegate, QTableWidget, QTableWidgetItem,
+    QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
     QListWidget, QListWidgetItem, QProgressBar, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
 
@@ -97,26 +97,6 @@ def status_color(online, theme):
     if theme == "dark":
         return QColor("#4ade80" if online else "#f87171")
     return QColor("#16a34a" if online else "#dc2626")
-
-
-class DeviceRowDelegate(QStyledItemDelegate):
-    """Draw a continuous status outline around each device row."""
-    def paint(self, painter, option, index):
-        super().paint(painter, option, index)
-        online = index.data(Qt.ItemDataRole.UserRole)
-        if online is None:
-            return
-        painter.save()
-        theme = self.parent().window().theme_mode
-        painter.setPen(QPen(status_color(online, theme), 2))
-        rect = option.rect.adjusted(0, 1, 0, -1)
-        painter.drawLine(rect.topLeft(), rect.topRight())
-        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
-        if index.column() == 0:
-            painter.drawLine(rect.topLeft(), rect.bottomLeft())
-        if index.column() == index.model().columnCount() - 1:
-            painter.drawLine(rect.topRight(), rect.bottomRight())
-        painter.restore()
 
 
 class AppearanceDialog(QDialog):
@@ -264,7 +244,6 @@ class MonitorWindow(QMainWindow):
         self.table.cellClicked.connect(self.open_device_details)
         self.table.setToolTip("Gerät anklicken, um alle Metadaten zu öffnen")
         self.table.setAlternatingRowColors(True)
-        self.table.setItemDelegate(DeviceRowDelegate(self.table))
         self.table.setShowGrid(False)
         self.table.verticalHeader().setDefaultSectionSize(48)
         self.table.verticalHeader().hide()
@@ -469,7 +448,7 @@ class MonitorWindow(QMainWindow):
                              f"{len(self.devices) - online} offline · {len(devices)} angezeigt")
         self.table.setRowCount(len(devices))
         for row, device in enumerate(devices):
-            values = [device["ip"], "Online" if device["online"] else "Offline",
+            values = [device["ip"], "● Online" if device["online"] else "● Offline",
                       local_time(device["last_seen"]), local_time(device["last_checked"]),
                       device.get("hostname") or "unbekannt", device.get("mac") or "unbekannt",
                       device.get("ping") or "unbekannt"]
