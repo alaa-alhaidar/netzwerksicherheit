@@ -155,6 +155,65 @@ def local_time(value):
         return str(value)
 
 
+def connection_info(device):
+    try:
+        info = json.loads(device.get("connection_info") or "{}")
+        return info if isinstance(info, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+class ConnectionDialog(QDialog):
+    def __init__(self, device, parent):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setWindowTitle("Anschlussdetails · " + device["ip"])
+        self.resize(540, 540)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        title = QLabel("Netzwerkanschluss")
+        title.setObjectName("title")
+        layout.addWidget(title)
+        card = QWidget()
+        card.setObjectName("toolbar")
+        form = QFormLayout(card)
+        form.setContentsMargins(20, 20, 20, 20)
+        form.setVerticalSpacing(14)
+        self.labels = {}
+        for key, caption in [("target", "Gerät"), ("type", "Netztyp"),
+                             ("interface", "Pi-Schnittstelle"), ("local_ip", "Lokale IP"),
+                             ("network", "Lokales Netz"), ("gateway", "Gateway zum Gerät"),
+                             ("mac", "Lokale MAC"), ("state", "Anschlussstatus"),
+                             ("mtu", "MTU"), ("checked", "Ermittelt")]:
+            label = QLabel()
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self.labels[key] = label
+            form.addRow(caption + ":", label)
+        layout.addWidget(card)
+        note = QLabel("Zeigt den Anschluss des Pi zum Gerät. Die Verbindung des Geräts "
+                      "selbst (WLAN oder Kabel) ist damit nicht bestimmt. "
+                      "Bei Offline-Geräten können die Angaben aus einem älteren Scan stammen.")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        close = QPushButton("Schließen")
+        close.clicked.connect(self.close)
+        layout.addWidget(close)
+        self.update_device(device)
+
+    def update_device(self, device):
+        info = connection_info(device)
+        info["target"] = device["ip"]
+        for key, label in self.labels.items():
+            value = info.get(key)
+            if key == "checked" and value:
+                value = local_time(value)
+            elif key == "gateway" and info.get("interface") and not value:
+                value = "Direkt verbunden"
+            label.setText(str(value) if value else "Unbekannt")
+
+
 class MonitorWindow(QMainWindow):
     def __init__(self, db_path, interval=10, network="auto", scan_interval=60):
         super().__init__()
@@ -166,6 +225,7 @@ class MonitorWindow(QMainWindow):
         self.appearance_window = None
         self.card_buttons = {}
         self.detail_windows = {}
+        self.connection_windows = {}
         self.offline_alerted = set()
         self.offline_popups = {}
         self.statistics_window = None
@@ -235,10 +295,10 @@ class MonitorWindow(QMainWindow):
         self.summary = QLabel()
         self.summary.setObjectName("summary")
         layout.addWidget(self.summary)
-        self.table = QTableWidget(0, 8)
+        self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels([
             "IP-Adresse", "Status", "Zuletzt erreichbar", "Zuletzt geprüft",
-            "Hostname", "MAC", "Ping", "Kritisch",
+            "Hostname", "MAC", "Ping", "Kritisch", "Netztyp (Pi)",
         ])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -319,7 +379,25 @@ class MonitorWindow(QMainWindow):
         item = self.table.item(row, 0)
         if item is None:
             return
-        self.open_device_by_ip(item.text())
+        if column == 8:
+            self.open_connection_by_ip(item.text())
+        else:
+            self.open_device_by_ip(item.text())
+
+    def open_connection_by_ip(self, ip):
+        device = next((device for device in self.devices if device["ip"] == ip), None)
+        if device is None:
+            return
+        dialog = self.connection_windows.get(ip)
+        if dialog is None:
+            dialog = ConnectionDialog(device, self)
+            self.connection_windows[ip] = dialog
+            dialog.finished.connect(lambda result, ip=ip: self.connection_windows.pop(ip, None))
+        else:
+            dialog.update_device(device)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def open_device_by_ip(self, ip):
         device = next((device for device in self.devices if device["ip"] == ip), None)
@@ -477,6 +555,8 @@ class MonitorWindow(QMainWindow):
             self.statistics_window.close()
         for dialog in list(self.detail_windows.values()):
             dialog.close()
+        for dialog in list(self.connection_windows.values()):
+            dialog.close()
         for popup in list(self.offline_popups.values()):
             popup.close()
 
@@ -495,6 +575,9 @@ class MonitorWindow(QMainWindow):
             dialog = self.detail_windows.get(device["ip"])
             if dialog is not None:
                 dialog.update_device(device)
+            connection = self.connection_windows.get(device["ip"])
+            if connection is not None:
+                connection.update_device(device)
         self.render()
         self.check_critical_devices()
         if self.process.state() != QProcess.ProcessState.NotRunning or self.scanning:
@@ -516,11 +599,14 @@ class MonitorWindow(QMainWindow):
                       local_time(device["last_seen"]), local_time(device["last_checked"]),
                       device.get("hostname") or "unbekannt", device.get("mac") or "unbekannt",
                       device.get("ping") or "unbekannt",
-                      "★ Kritisch" if self.is_critical(device["ip"]) else "—"]
+                      "★ Kritisch" if self.is_critical(device["ip"]) else "—",
+                      connection_info(device).get("type") or "Unbekannt"]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.ItemDataRole.UserRole, bool(device["online"]))
                 item.setToolTip(value)
+                if column == 8:
+                    item.setToolTip("Anschlussdetails des Pi öffnen")
                 if column == 1:
                     item.setForeground(status_color(device["online"], self.theme_mode))
                 self.table.setItem(row, column, item)
@@ -551,7 +637,8 @@ class MonitorWindow(QMainWindow):
             status = "● Online" if device["online"] else "○ Offline"
             if self.is_critical(device["ip"]):
                 status += " · ★ Kritisch"
-            button.setText(f"{name}\n{device['ip']}\n\n{status}   ·   Ping: {device.get('ping') or '—'}\n{device.get('mac') or 'MAC unbekannt'}")
+            kind = connection_info(device).get("type") or "Netztyp unbekannt"
+            button.setText(f"{name}\n{device['ip']} · {kind}\n\n{status}   ·   Ping: {device.get('ping') or '—'}\n{device.get('mac') or 'MAC unbekannt'}")
             button.setToolTip("Gerätedetails öffnen: " + device["ip"])
 
 
@@ -588,7 +675,7 @@ class DeviceDetailsDialog(QDialog):
         form.addRow("Überwachung:", self.critical_checkbox)
         self.labels = {}
         self.fields = self.FIELDS + [(key, key) for key in device
-                                    if key not in dict(self.FIELDS) and key != "detail_error"]
+                                    if key not in dict(self.FIELDS) and key not in ("detail_error", "connection_info")]
         for key, caption in self.fields:
             label = QLabel()
             label.setTextFormat(Qt.TextFormat.PlainText)
@@ -602,6 +689,9 @@ class DeviceDetailsDialog(QDialog):
         note.setWordWrap(True)
         layout.addWidget(note)
         buttons = QHBoxLayout()
+        connection = QPushButton("Anschlussdetails")
+        connection.clicked.connect(lambda: parent.open_connection_by_ip(device["ip"]))
+        buttons.addWidget(connection)
         copy = QPushButton("Metadaten kopieren")
         copy.clicked.connect(self.copy_metadata)
         buttons.addWidget(copy)

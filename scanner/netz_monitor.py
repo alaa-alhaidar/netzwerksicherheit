@@ -31,7 +31,7 @@ def database(path):
         first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
         last_checked TEXT NOT NULL)""")
     columns = {row[1] for row in db.execute("PRAGMA table_info(devices)")}
-    for column in ("hostname", "mac", "ping", "services", "detail_error"):
+    for column in ("hostname", "mac", "ping", "services", "detail_error", "connection_info"):
         if column not in columns:
             db.execute(f"ALTER TABLE devices ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
     db.execute("""CREATE TABLE IF NOT EXISTS scans (
@@ -111,6 +111,39 @@ def get_hostname(ip):
         return socket.gethostbyaddr(ip)[0]
     except OSError:
         return "unbekannt"
+
+
+def get_connection_info(ip):
+    """Describe the scanner's route and local interface, not the remote device's medium."""
+    try:
+        result = subprocess.run(["ip", "-j", "-4", "route", "get", str(ipaddress.IPv4Address(ip))],
+                                capture_output=True, text=True, check=True, timeout=5)
+        route = json.loads(result.stdout)[0]
+        interface = route.get("dev", "")
+        if not interface:
+            return {}
+        result = subprocess.run(["ip", "-j", "-4", "addr", "show", "dev", interface],
+                                capture_output=True, text=True, check=True, timeout=5)
+        link = json.loads(result.stdout)[0]
+        sys_path = Path("/sys/class/net") / interface
+        if (sys_path / "wireless").exists() or (sys_path / "phy80211").exists():
+            kind = "WLAN"
+        elif link.get("link_type") == "ether" and (sys_path / "device").exists():
+            kind = "Ethernet"
+        else:
+            kind = "Unbekannt / virtuell"
+        source = route.get("prefsrc") or route.get("src") or ""
+        address = next((addr for addr in link.get("addr_info", [])
+                        if addr.get("local") == source), None)
+        network = str(ipaddress.IPv4Interface(
+            f"{source}/{address['prefixlen']}").network) if address else ""
+        return {"type": kind, "interface": interface, "local_ip": source,
+                "network": network, "gateway": route.get("gateway", ""),
+                "mac": link.get("address", ""), "state": link.get("operstate", ""),
+                "mtu": link.get("mtu", ""),
+                "checked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
+        return {}
 
 
 def get_mac(ip):
@@ -214,6 +247,10 @@ def scan(db, network=NETWORK, timeout=300):
                     (float(match.group(2)), int(bool(match.group(1))), scan_id, ip))
         # Notify the GUI after the result is committed, rather than waiting for the next host.
         print(f"Gerätestatus aktualisiert: {ip}", flush=True)
+        connection = get_connection_info(ip)
+        with db:
+            db.execute("UPDATE devices SET connection_info=? WHERE ip=?",
+                       (json.dumps(connection), ip))
     print(f"\n{'=' * 65}\nScan abgeschlossen: {len(devices)} Geräte gefunden.", flush=True)
 
 

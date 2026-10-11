@@ -266,3 +266,18 @@ Für Ping wird ein Versuch mit einer Antwortfrist von einer Sekunde verwendet
 (`ping -c 1 -W 1`). Auch Geräte, die Nmap als online erkennt, lösen bei fehlender
 Ping-Antwort die Warnung aus. Geräte, die ICMP blockieren, können daher ebenfalls
 gemeldet werden. Es gibt keine zusätzliche Wartezeit über mehrere Fehlversuche.
+
+### Netztyp und Anschlussdetails
+
+Die Spalte „Netztyp (Pi)“ zeigt WLAN, Ethernet oder einen unbekannten/virtuellen
+Anschluss. Sie beschreibt die lokale Schnittstelle, über die der Pi das Gerät
+laut Routingtabelle erreicht. Der Anschluss des entfernten Geräts selbst lässt
+sich aus Nmap/Ping nicht zuverlässig bestimmen.
+
+Ein Klick auf die Spalte öffnet eine Anschlusskarte mit Schnittstelle, lokaler IP,
+Netzbereich, Gateway zum Gerät, lokaler MAC, Anschlussstatus, MTU und Zeit der
+Ermittlung. In der Kartenansicht öffnet man zuerst das Gerät und anschließend
+„Anschlussdetails“. Die Angaben werden beim Scan ermittelt und lokal gespeichert;
+bei Offline-Geräten bleiben die letzten ermittelten Angaben sichtbar. Nach dem
+Update ist für vorhandene Geräte ein neuer Scan nötig. Der PostgreSQL-Abgleich
+überträgt weiterhin die bisherigen Geräte- und Statistikfelder.
