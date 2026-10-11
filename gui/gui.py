@@ -20,7 +20,7 @@ from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
-    QListWidget, QListWidgetItem, QProgressBar, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
+    QListWidget, QListWidgetItem, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
 
 GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/almljvn/netzwerkueberwachung-e28093-pi-5?from=now-5m&to=now&timezone=browser&refresh=5s"
@@ -54,8 +54,6 @@ QTableWidget::item { padding: 10px 12px; border-bottom: 1px solid #e8eef5; }
 QHeaderView::section { background: #edf2f8; color: #4b6078; border: none;
     padding: 14px 12px; font-weight: bold; }
 QTableCornerButton::section { background: #edf2f8; border: none; }
-QProgressBar { border: none; background: #e1e9f2; border-radius: 3px; }
-QProgressBar::chunk { background: #087f68; border-radius: 3px; }
 QScrollArea { background: #ffffff; border: 1px solid #dce4ee; border-radius: 10px; }
 QScrollArea > QWidget > QWidget { background: #ffffff; }
 QScrollBar:vertical { background: #ffffff; width: 10px; margin: 0; }
@@ -189,7 +187,17 @@ class MonitorWindow(QMainWindow):
         layout.setSpacing(18)
         title = QLabel("Netzwerk-Monitor")
         title.setObjectName("title")
-        layout.addWidget(title)
+        heading = QHBoxLayout()
+        heading.addWidget(title)
+        self.scan_indicator = QLabel("●")
+        self.scan_indicator.setFixedWidth(24)
+        heading.addWidget(self.scan_indicator)
+        heading.addStretch()
+        layout.addLayout(heading)
+        self.blink_on = False
+        self.blink_timer = QTimer(self)
+        self.blink_timer.setInterval(450)
+        self.blink_timer.timeout.connect(self.blink_scan_indicator)
         subtitle = QLabel("Dein Netzwerk im Blick · Geräte anklicken für Details")
         subtitle.setObjectName("muted")
         layout.addWidget(subtitle)
@@ -225,12 +233,6 @@ class MonitorWindow(QMainWindow):
         self.scan_interval.setValue(scan_interval)
         scan_controls.addWidget(self.scan_interval)
         layout.addWidget(toolbar)
-        self.progress = QProgressBar()
-        self.progress.setFixedHeight(6)
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self.progress.setTextVisible(False)
-        layout.addWidget(self.progress)
         self.summary = QLabel()
         self.summary.setObjectName("summary")
         layout.addWidget(self.summary)
@@ -272,6 +274,15 @@ class MonitorWindow(QMainWindow):
         self.apply_appearance(self.view_mode, self.theme_mode)
         self.refresh()
 
+    def update_scan_indicator(self):
+        color = status_color(True, self.theme_mode).name() if self.blink_on else ("#405570" if self.theme_mode == "dark" else "#cad5e3")
+        self.scan_indicator.setStyleSheet(f"font-size: 20px; color: {color};")
+        self.scan_indicator.setToolTip("Scan läuft" if self.blink_timer.isActive() else "Kein Scan aktiv")
+
+    def blink_scan_indicator(self):
+        self.blink_on = not self.blink_on
+        self.update_scan_indicator()
+
     def open_settings(self):
         if self.appearance_window is None:
             self.appearance_window = AppearanceDialog(self)
@@ -286,6 +297,7 @@ class MonitorWindow(QMainWindow):
         self.settings.setValue("appearance/theme", self.theme_mode)
         self.settings.sync()
         self.setStyleSheet(theme_style(self.theme_mode))
+        self.update_scan_indicator()
         self.views.setCurrentIndex(1 if self.view_mode == "cards" else 0)
         self.render()
         if self.statistics_window is not None:
@@ -351,7 +363,9 @@ class MonitorWindow(QMainWindow):
         self.scan_button.setEnabled(True)
         self.scan_button.setText("Scanning stoppen")
         self.scan_interval.setEnabled(False)
-        self.progress.setRange(0, 0)
+        self.blink_timer.start()
+        self.blink_on = True
+        self.update_scan_indicator()
         self.timer.setInterval(500)
         self.message.setText("Geräte werden mit Nmap gesucht …")
         script = Path(__file__).resolve().parents[1] / "scanner" / "netz_monitor.py"
@@ -375,8 +389,9 @@ class MonitorWindow(QMainWindow):
         self.scan_button.setEnabled(True)
         self.scan_button.setText("Scanning stoppen" if self.scanning else "Scanning starten")
         self.scan_interval.setEnabled(not self.scanning)
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
+        self.blink_timer.stop()
+        self.blink_on = False
+        self.update_scan_indicator()
         self.timer.setInterval(self.refresh_interval)
 
     def scan_finished(self, exit_code, exit_status):
@@ -403,6 +418,7 @@ class MonitorWindow(QMainWindow):
     def closeEvent(self, event):
         self.scanning = False
         self.scan_timer.stop()
+        self.blink_timer.stop()
         if self.process.state() != QProcess.ProcessState.NotRunning:
             self.process.terminate()
             self.message.setText("Scanner wird beendet … Fenster danach erneut schließen.")
