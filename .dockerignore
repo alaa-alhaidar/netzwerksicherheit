@@ -3,6 +3,8 @@
 .aws
 .codex
 data
+**/router.json
+**/.router-*.tmp
 .venv
 **/__pycache__
 **/*.pyc

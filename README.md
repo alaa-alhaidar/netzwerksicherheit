@@ -269,15 +269,37 @@ gemeldet werden. Es gibt keine zusätzliche Wartezeit über mehrere Fehlversuche
 
 ### Netztyp und Anschlussdetails
 
-Die Spalte „Netztyp (Pi)“ zeigt WLAN, Ethernet oder einen unbekannten/virtuellen
-Anschluss. Sie beschreibt die lokale Schnittstelle, über die der Pi das Gerät
-laut Routingtabelle erreicht. Der Anschluss des entfernten Geräts selbst lässt
-sich aus Nmap/Ping nicht zuverlässig bestimmen.
+Die Spalte „Netztyp“ zeigt den Geräteanschluss laut FRITZ!Box: WLAN, Ethernet oder
+„Unbekannt“. Ein Klick öffnet eine Anschlusskarte. Dort stehen die Router-Daten
+(Geräte-MAC, Hostname, Status, Anschluss, Geschwindigkeit soweit verfügbar und
+Abfragezeit) und separat die lokale Pi-Schnittstelle mit IP, Netzbereich, Gateway,
+MAC, Status und MTU. In der Kartenansicht führt „Anschlussdetails“ im Gerätedialog
+zur gleichen Karte.
 
-Ein Klick auf die Spalte öffnet eine Anschlusskarte mit Schnittstelle, lokaler IP,
-Netzbereich, Gateway zum Gerät, lokaler MAC, Anschlussstatus, MTU und Zeit der
-Ermittlung. In der Kartenansicht öffnet man zuerst das Gerät und anschließend
-„Anschlussdetails“. Die Angaben werden beim Scan ermittelt und lokal gespeichert;
-bei Offline-Geräten bleiben die letzten ermittelten Angaben sichtbar. Nach dem
-Update ist für vorhandene Geräte ein neuer Scan nötig. Der PostgreSQL-Abgleich
-überträgt weiterhin die bisherigen Geräte- und Statistikfelder.
+#### FRITZ!Box 7430 einrichten
+
+1. Im Router „Zugriff für Anwendungen zulassen“ aktivieren.
+2. Im Monitor „Einstellungen → FRITZ!Box einrichten“ öffnen.
+3. Router-IP `192.168.178.1` und einen berechtigten FRITZ!Box-Benutzer mit Passwort
+   eintragen; „Geräteanschlüsse vom Router abfragen“ aktivieren und speichern.
+4. Scanning starten. Die Abfrage erfolgt nach den Nmap-/Ping-Prüfungen.
+
+Die Anbindung liest die TR-064-Hosts-Schnittstelle über Port 49000 mit HTTP-Digest-
+Authentifizierung; sie verändert keine Router-Einstellungen. Die lokale Datei
+`router.json` liegt neben der SQLite-Datenbank, ist mit Dateirechten 0600 geschützt
+und wird von Git und Docker-Builds ausgeschlossen. Das Passwort ist darin lokal
+im Klartext gespeichert. Beim Docker-Scanner muss diese Datei im Datenvolume
+vorhanden sein und das Scanner-Image nach dem Update neu gebaut werden.
+
+Ohne Router-Anmeldung wird für das Gerät „Unbekannt“ angezeigt; der lokale
+Pi-Anschluss wird nicht als Geräteanschluss ausgegeben. Die Routerangaben hängen
+von FRITZ!OS, Berechtigungen und der Router-Geräteliste ab. Fehlende Geräte oder
+andere Anschlussarten bleiben unbekannt. Bei einem Abfragefehler bleiben frühere
+Routerangaben mit ihrer ursprünglichen Zeit sichtbar. Der Scan und die kritischen
+Warnungen laufen trotzdem weiter. Bei deaktivierter Routerabfrage bleiben bereits
+ermittelte Angaben ebenfalls mit ihrem Zeitstempel erhalten.
+
+Die Anschlussdaten werden lokal gespeichert. Der PostgreSQL-Abgleich überträgt
+weiterhin die bisherigen Geräte- und Statistikfelder.
+
+Schnittstellendokumentation: [FRITZ! TR-064 Hosts](https://fritz.support/resources/TR-064_Hosts.pdf).
