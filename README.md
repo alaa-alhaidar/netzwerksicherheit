@@ -281,3 +281,32 @@ Ermittlung. In der Kartenansicht öffnet man zuerst das Gerät und anschließend
 bei Offline-Geräten bleiben die letzten ermittelten Angaben sichtbar. Nach dem
 Update ist für vorhandene Geräte ein neuer Scan nötig. Der PostgreSQL-Abgleich
 überträgt weiterhin die bisherigen Geräte- und Statistikfelder.
+
+### LED-Alarm am Pi 5 (ohne Buzzer)
+
+Verdrahtung für eine LED: GPIO17 (physischer Pin 11) → 470-Ω-Vorwiderstand →
+LED-Anode (+); LED-Kathode (−) → GND (physischer Pin 6).
+
+Unter „Einstellungen“ die Option „LED bei kritischem Alarm blinken lassen“
+aktivieren und „GPIO 17“ wählen. Die GPIO-Nummer ist die BCM-Nummer, nicht die
+physische Pinnummer. Die Einstellung wird lokal gespeichert. Ohne Aktivierung
+werden keine GPIO-Pins angesteuert.
+
+Die LED blinkt mit 500 ms an / 500 ms aus, solange mindestens ein als kritisch
+markiertes Gerät offline ist oder keine Ping-Antwort liefert. Das Bestätigen eines
+Popups beendet nur die Bildschirmmeldung, nicht den LED-Alarm. Sobald alle
+kritischen Geräte wieder antworten oder die Markierungen entfernt werden, geht
+die LED aus. Beim Deaktivieren und Beenden werden LED und GPIO-Zugriff freigegeben.
+
+Die Ansteuerung läuft in der Desktop-GUI und verwendet GPIO Zero mit lgpio für
+den Pi 5. Falls benötigt, auf dem Pi installieren:
+
+```bash
+sudo apt install python3-gpiozero python3-lgpio
+```
+
+Bei Nutzung einer virtuellen Python-Umgebung gibt es ergänzend
+`gui/requirements-gpio.txt`. Der angemeldete Benutzer benötigt Zugriff auf die
+GPIO-Geräte. Fehlt dieser Zugriff, zeigt „LED-Status“ in den Einstellungen den
+Fehler an; Scans und Popups funktionieren weiterhin. Die Softwaretests verwenden
+simulierte Ausgänge; die physische LED muss am Pi überprüft werden.

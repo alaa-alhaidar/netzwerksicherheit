@@ -12,8 +12,10 @@ import sys
 
 try:
     from .stats_view import StatisticsDialog
+    from .led_alarm import LEDAlarm
 except ImportError:
     from stats_view import StatisticsDialog
+    from led_alarm import LEDAlarm
 
 from PyQt6.QtCore import QProcess, QSettings, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices
@@ -118,9 +120,24 @@ class AppearanceDialog(QDialog):
         self.theme.addItem("Dunkel", "dark")
         self.theme.setCurrentIndex(self.theme.findData(parent.theme_mode))
         form.addRow("Farbschema", self.theme)
+        self.led_enabled = QCheckBox("LED bei kritischem Alarm blinken lassen")
+        self.led_enabled.setChecked(parent.settings.value("hardware/led_enabled", False, type=bool))
+        form.addRow("Hardware-Alarm", self.led_enabled)
+        self.led_pin = QSpinBox()
+        self.led_pin.setRange(2, 27)
+        self.led_pin.setPrefix("GPIO ")
+        self.led_pin.setValue(parent.settings.value("hardware/led_pin", 17, type=int))
+        self.led_pin.setToolTip("BCM-Nummer; GPIO17 entspricht dem physischen Pin 11.")
+        form.addRow("LED-Anschluss (BCM)", self.led_pin)
+        self.led_status = QLabel(parent.led_alarm.status)
+        self.led_status.setWordWrap(True)
+        form.addRow("LED-Status", self.led_status)
+        parent.led_alarm.statusChanged.connect(self.led_status.setText)
         layout.addLayout(form)
         self.view.currentIndexChanged.connect(self.apply)
         self.theme.currentIndexChanged.connect(self.apply)
+        self.led_enabled.toggled.connect(self.apply_led)
+        self.led_pin.valueChanged.connect(self.apply_led)
         note = QLabel("Änderungen werden sofort angewendet und gespeichert.")
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -130,6 +147,9 @@ class AppearanceDialog(QDialog):
 
     def apply(self):
         self.parent().apply_appearance(self.view.currentData(), self.theme.currentData())
+
+    def apply_led(self):
+        self.parent().apply_led(self.led_enabled.isChecked(), self.led_pin.value())
 
 
 
@@ -219,6 +239,7 @@ class MonitorWindow(QMainWindow):
         super().__init__()
         self.db_path = str(Path(db_path).resolve())
         self.devices = []
+        self.led_alarm = LEDAlarm(self)
         self.settings = QSettings(str(Path(self.db_path).parent / "ui-settings.ini"), QSettings.Format.IniFormat)
         self.view_mode = self.settings.value("appearance/view", "list")
         self.theme_mode = self.settings.value("appearance/theme", "light")
@@ -331,7 +352,15 @@ class MonitorWindow(QMainWindow):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(interval * 1000)
         self.apply_appearance(self.view_mode, self.theme_mode)
+        self.led_alarm.configure(self.settings.value("hardware/led_enabled", False, type=bool),
+                                 self.settings.value("hardware/led_pin", 17, type=int))
         self.refresh()
+
+    def apply_led(self, enabled, pin):
+        self.settings.setValue("hardware/led_enabled", enabled)
+        self.settings.setValue("hardware/led_pin", pin)
+        self.settings.sync()
+        self.led_alarm.configure(enabled, pin)
 
     def update_scan_indicator(self):
         color = status_color(True, self.theme_mode).name() if self.blink_on else ("#405570" if self.theme_mode == "dark" else "#cad5e3")
@@ -427,6 +456,7 @@ class MonitorWindow(QMainWindow):
         offline = {device["ip"]: device for device in self.devices
                    if self.is_critical(device["ip"]) and
                    (not device["online"] or device.get("ping") == "keine Antwort")}
+        self.led_alarm.set_active(bool(offline))
         for ip in list(self.offline_popups):
             if ip not in offline:
                 self.offline_popups[ip].close()
@@ -539,6 +569,7 @@ class MonitorWindow(QMainWindow):
             self.message.setText("Scanner konnte nicht gestartet werden: " + self.process.errorString())
 
     def closeEvent(self, event):
+        self.led_alarm.close()
         self.scanning = False
         self.scan_timer.stop()
         self.blink_timer.stop()
