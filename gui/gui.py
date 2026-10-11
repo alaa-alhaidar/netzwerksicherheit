@@ -18,7 +18,7 @@ except ImportError:
 from PyQt6.QtCore import QProcess, QSettings, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
-    QApplication, QAbstractItemView, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
+    QApplication, QAbstractItemView, QCheckBox, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
     QListWidget, QListWidgetItem, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
@@ -236,10 +236,10 @@ class MonitorWindow(QMainWindow):
         self.summary = QLabel()
         self.summary.setObjectName("summary")
         layout.addWidget(self.summary)
-        self.table = QTableWidget(0, 7)
+        self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels([
             "IP-Adresse", "Status", "Zuletzt erreichbar", "Zuletzt geprüft",
-            "Hostname", "MAC", "Ping",
+            "Hostname", "MAC", "Ping", "Kritisch",
         ])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -336,6 +336,14 @@ class MonitorWindow(QMainWindow):
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
+
+    def is_critical(self, ip):
+        return self.settings.value(f"devices/{ip}/critical", False, type=bool)
+
+    def set_critical(self, ip, critical):
+        self.settings.setValue(f"devices/{ip}/critical", bool(critical))
+        self.settings.sync()
+        self.render()
 
     def toggle_scanning(self):
         if self.scanning:
@@ -467,7 +475,8 @@ class MonitorWindow(QMainWindow):
             values = [device["ip"], "● Online" if device["online"] else "● Offline",
                       local_time(device["last_seen"]), local_time(device["last_checked"]),
                       device.get("hostname") or "unbekannt", device.get("mac") or "unbekannt",
-                      device.get("ping") or "unbekannt"]
+                      device.get("ping") or "unbekannt",
+                      "★ Kritisch" if self.is_critical(device["ip"]) else "—"]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.ItemDataRole.UserRole, bool(device["online"]))
@@ -500,6 +509,8 @@ class MonitorWindow(QMainWindow):
             name = device.get("hostname") or "Unbekanntes Gerät"
             name = button.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, 260)
             status = "● Online" if device["online"] else "○ Offline"
+            if self.is_critical(device["ip"]):
+                status += " · ★ Kritisch"
             button.setText(f"{name}\n{device['ip']}\n\n{status}   ·   Ping: {device.get('ping') or '—'}\n{device.get('mac') or 'MAC unbekannt'}")
             button.setToolTip("Gerätedetails öffnen: " + device["ip"])
 
@@ -529,6 +540,12 @@ class DeviceDetailsDialog(QDialog):
         form = QFormLayout(content)
         form.setContentsMargins(20, 20, 20, 20)
         form.setVerticalSpacing(18)
+        self.critical_checkbox = QCheckBox("Als kritisches Gerät markieren")
+        self.critical_checkbox.setChecked(parent.is_critical(device["ip"]))
+        self.critical_checkbox.setToolTip("Die Markierung wird sofort für dieses Gerät gespeichert.")
+        self.critical_checkbox.toggled.connect(
+            lambda checked: parent.set_critical(device["ip"], checked))
+        form.addRow("Überwachung:", self.critical_checkbox)
         self.labels = {}
         self.fields = self.FIELDS + [(key, key) for key in device
                                     if key not in dict(self.FIELDS) and key != "detail_error"]

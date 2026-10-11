@@ -245,3 +245,10 @@ Die lokale Synchronisierung und PDC-Konfiguration stehen in
 Die Auswahl wird sofort angewendet und in `data/ui-settings.ini` gespeichert
 (bei anderem Datenbankpfad daneben). Standard: helle Listenansicht. Beim nächsten
 Start wird die zuletzt gespeicherte Darstellung geladen. Die Datei bleibt lokal.
+
+### Kritische Geräte markieren
+
+Im Detailfenster eines Geräts lässt sich „Als kritisches Gerät markieren“ aktivieren
+oder entfernen. Die Änderung wird sofort gespeichert und in Liste und Karten als
+„★ Kritisch“ angezeigt. Die Markierung bleibt nach einem Neustart erhalten und ist
+an die IP-Adresse gebunden. Sie löst noch keine Benachrichtigungen oder Neustarts aus.
