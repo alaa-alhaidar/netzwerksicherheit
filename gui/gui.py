@@ -16,10 +16,10 @@ except ImportError:
     from stats_view import StatisticsDialog
 
 from PyQt6.QtCore import QProcess, QSettings, QSize, Qt, QTimer, QUrl
-from PyQt6.QtGui import QColor, QDesktopServices
+from PyQt6.QtGui import QColor, QDesktopServices, QPen
 from PyQt6.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
-    QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
+    QMainWindow, QPushButton, QStyledItemDelegate, QTableWidget, QTableWidgetItem,
     QListWidget, QListWidgetItem, QProgressBar, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
 
@@ -70,6 +70,8 @@ QListWidget::item { background: transparent; border: none; }
 QPushButton#deviceCard { background: #f4f7fb; color: #243247; border: 1px solid #cad5e3;
     text-align: left; padding: 18px; border-radius: 12px; font-weight: normal; }
 QPushButton#deviceCard:hover { background: #edf8f5; border-color: #16836c; }
+QPushButton#deviceCard[online="true"] { border: 2px solid #16a34a; }
+QPushButton#deviceCard[online="false"] { border: 2px solid #dc2626; }
 """
 
 
@@ -85,9 +87,36 @@ def theme_style(mode):
         "#dde6f0": "#30465f", "#a4b5ca": "#6a819d", "#d3dfea": "#182639",
         "#edf1f6": "#1a293d", "#8190a3": "#7f92ac", "#edf2f8": "#1e2d43",
         "#4b6078": "#aebfd3", "#e1e9f2": "#1e3044", "#b6c5d7": "#405570",
+        "#16a34a": "#4ade80", "#dc2626": "#f87171",
     }
     style = re.sub(r"#[0-9a-f]{6}", lambda match: colors.get(match.group(), match.group()), STYLE)
     return style + "QPushButton#scan { color: #ffffff; }"
+
+
+def status_color(online, theme):
+    if theme == "dark":
+        return QColor("#4ade80" if online else "#f87171")
+    return QColor("#16a34a" if online else "#dc2626")
+
+
+class DeviceRowDelegate(QStyledItemDelegate):
+    """Draw a continuous status outline around each device row."""
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        online = index.data(Qt.ItemDataRole.UserRole)
+        if online is None:
+            return
+        painter.save()
+        theme = self.parent().window().theme_mode
+        painter.setPen(QPen(status_color(online, theme), 2))
+        rect = option.rect.adjusted(0, 1, 0, -1)
+        painter.drawLine(rect.topLeft(), rect.topRight())
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+        if index.column() == 0:
+            painter.drawLine(rect.topLeft(), rect.bottomLeft())
+        if index.column() == index.model().columnCount() - 1:
+            painter.drawLine(rect.topRight(), rect.bottomRight())
+        painter.restore()
 
 
 class AppearanceDialog(QDialog):
@@ -235,6 +264,7 @@ class MonitorWindow(QMainWindow):
         self.table.cellClicked.connect(self.open_device_details)
         self.table.setToolTip("Gerät anklicken, um alle Metadaten zu öffnen")
         self.table.setAlternatingRowColors(True)
+        self.table.setItemDelegate(DeviceRowDelegate(self.table))
         self.table.setShowGrid(False)
         self.table.verticalHeader().setDefaultSectionSize(48)
         self.table.verticalHeader().hide()
@@ -445,9 +475,10 @@ class MonitorWindow(QMainWindow):
                       device.get("ping") or "unbekannt"]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
+                item.setData(Qt.ItemDataRole.UserRole, bool(device["online"]))
                 item.setToolTip(value)
                 if column == 1:
-                    item.setForeground(QColor(("#70e5c1" if device["online"] else "#f5b580") if self.theme_mode == "dark" else ("#13795b" if device["online"] else "#a45716")))
+                    item.setForeground(status_color(device["online"], self.theme_mode))
                 self.table.setItem(row, column, item)
 
         identities = [device["ip"] for device in devices]
@@ -465,6 +496,12 @@ class MonitorWindow(QMainWindow):
                 self.card_buttons[ip] = button
         for device in devices:
             button = self.card_buttons[device["ip"]]
+            online = bool(device["online"])
+            if button.property("online") != online:
+                button.setProperty("online", online)
+                button.style().unpolish(button)
+                button.style().polish(button)
+                button.update()
             name = device.get("hostname") or "Unbekanntes Gerät"
             name = button.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, 260)
             status = "● Online" if device["online"] else "○ Offline"
