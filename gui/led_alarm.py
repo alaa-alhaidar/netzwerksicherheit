@@ -41,9 +41,10 @@ class LEDAlarm(QObject):
             self.led, self.factory = make_led(pin)
             self.report(f"LED an GPIO{pin} bereit")
             self.update_output()
-        except Exception:
+        except Exception as exc:
             self.close()
-            self.report("LED nicht verfügbar: GPIO-Zugriff und gpiozero/lgpio prüfen.")
+            self.report(f"LED nicht verfügbar ({type(exc).__name__}: {exc}). "
+                        "GPIO-Zugriff und gpiozero/lgpio prüfen.")
 
     def set_active(self, active):
         active = bool(active)
@@ -61,19 +62,20 @@ class LEDAlarm(QObject):
             else:
                 self.timer.stop()
                 self.led.off()
-        except Exception:
-            self.fail()
+        except Exception as exc:
+            self.fail(exc)
 
     def toggle(self):
         try:
             if self.led is not None:
                 self.led.toggle()
-        except Exception:
-            self.fail()
+        except Exception as exc:
+            self.fail(exc)
 
-    def fail(self):
+    def fail(self, error):
         self.close()
-        self.report("LED-Ansteuerung fehlgeschlagen; Bildschirmalarme bleiben aktiv.")
+        self.report(f"LED-Ansteuerung fehlgeschlagen ({type(error).__name__}: {error}); "
+                    "Bildschirmalarme bleiben aktiv.")
 
     def close(self):
         self.timer.stop()
