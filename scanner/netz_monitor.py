@@ -212,6 +212,8 @@ def scan(db, network=NETWORK, timeout=300):
                 db.execute("""UPDATE observations SET ping_ms=?, ping_upper_bound=?
                     WHERE scan_id=? AND ip=?""",
                     (float(match.group(2)), int(bool(match.group(1))), scan_id, ip))
+        # Notify the GUI after the result is committed, rather than waiting for the next host.
+        print(f"Gerätestatus aktualisiert: {ip}", flush=True)
     print(f"\n{'=' * 65}\nScan abgeschlossen: {len(devices)} Geräte gefunden.", flush=True)
 
 

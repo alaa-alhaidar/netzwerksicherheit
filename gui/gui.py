@@ -350,7 +350,8 @@ class MonitorWindow(QMainWindow):
 
     def check_critical_devices(self, repeat=False):
         offline = {device["ip"]: device for device in self.devices
-                   if self.is_critical(device["ip"]) and not device["online"]}
+                   if self.is_critical(device["ip"]) and
+                   (not device["online"] or device.get("ping") == "keine Antwort")}
         for ip in list(self.offline_popups):
             if ip not in offline:
                 self.offline_popups[ip].close()
@@ -369,12 +370,12 @@ class MonitorWindow(QMainWindow):
                 continue
             popup = QMessageBox(self)
             popup.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-            popup.setWindowTitle("Kritisches Gerät offline")
+            popup.setWindowTitle("Kritisches Gerät antwortet nicht")
             popup.setIcon(QMessageBox.Icon.Warning)
             popup.setTextFormat(Qt.TextFormat.PlainText)
             name = device.get("hostname") or "Unbekanntes Gerät"
-            popup.setText(f"Das kritische Gerät {name} ({ip}) ist offline.")
-            popup.setInformativeText("Das Gerät wurde beim letzten Scan nicht erreicht.")
+            popup.setText(f"Das kritische Gerät {name} ({ip}) antwortet nicht.")
+            popup.setInformativeText("Bereits die erste fehlende Antwort löst diese Warnung aus.")
             popup.setStandardButtons(QMessageBox.StandardButton.Ok)
             popup.setWindowModality(Qt.WindowModality.NonModal)
             self.offline_popups[ip] = popup

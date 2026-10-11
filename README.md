@@ -253,10 +253,16 @@ oder entfernen. Die Änderung wird sofort gespeichert und in Liste und Karten al
 „★ Kritisch“ angezeigt. Die Markierung bleibt nach einem Neustart erhalten und ist
 an die IP-Adresse gebunden. Automatische Neustarts werden dadurch nicht ausgelöst.
 
-Ist ein kritisches Gerät offline, erscheint sofort nach der Erkennung in der
+Ist ein kritisches Gerät offline oder antwortet es auf den ersten Ping nicht,
+erscheint sofort nach der Erkennung in der
 Oberfläche ein Warn-Popup mit Hostname und IP-Adresse. Der Scan läuft dabei weiter.
 Nach jedem erfolgreich abgeschlossenen Scan erscheint die Warnung erneut, solange
-das Gerät offline bleibt. Ein noch offenes Popup wird wieder in den Vordergrund
+das Gerät offline bleibt oder keine Ping-Antwort liefert. Ein noch offenes Popup wird wieder in den Vordergrund
 geholt; bereits bestätigte Warnungen werden erneut geöffnet. Auch beim Markieren eines bereits offline
 angezeigten Geräts erscheint die Warnung. Das Popup schließt sich, wenn das Gerät
-wieder online ist oder die Markierung entfernt wird.
+wieder erreichbar ist und auf Ping antwortet oder die Markierung entfernt wird.
+
+Für Ping wird ein Versuch mit einer Antwortfrist von einer Sekunde verwendet
+(`ping -c 1 -W 1`). Auch Geräte, die Nmap als online erkennt, lösen bei fehlender
+Ping-Antwort die Warnung aus. Geräte, die ICMP blockieren, können daher ebenfalls
+gemeldet werden. Es gibt keine zusätzliche Wartezeit über mehrere Fehlversuche.
