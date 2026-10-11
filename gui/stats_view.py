@@ -51,31 +51,34 @@ class HistoryChart(QWidget):
         self.update()
 
     def paintEvent(self, event):
+        dark = getattr(self.window().parent(), 'theme_mode', 'light') == 'dark'
+        def color(light, night):
+            return QColor(night if dark else light)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QColor('#ffffff'))
-        painter.setPen(QPen(QColor('#dce4ee')))
+        painter.setBrush(color('#ffffff', '#111d2e'))
+        painter.setPen(QPen(color('#dce4ee', '#34445c')))
         painter.drawRoundedRect(QRectF(1, 1, self.width()-2, self.height()-2), 10, 10)
-        painter.setPen(QColor('#243247'))
+        painter.setPen(color('#243247', '#dce6f0'))
         painter.drawText(18, 26, self.caption)
         valid = [(stamp, value) for stamp, value in self.points if value is not None]
         if not valid:
-            painter.setPen(QColor('#62748a'))
+            painter.setPen(color('#62748a', '#a3b5ca'))
             painter.drawText(18, 90, 'Noch keine Messwerte im gewählten Zeitraum')
             return
         left, right, top, bottom = 54, self.width()-24, 52, self.height()-38
         maximum = max(max(value for _, value in valid) * 1.15, 1)
         first, last = self.points[0][0], self.points[-1][0]
         duration = max(last-first, 1)
-        painter.setPen(QPen(QColor('#dce4ee'), 1))
+        painter.setPen(QPen(color('#dce4ee', '#34445c'), 1))
         for index in range(3):
             y = bottom - (bottom-top)*index/2
-            painter.setPen(QPen(QColor('#dce4ee'), 1))
+            painter.setPen(QPen(color('#dce4ee', '#34445c'), 1))
             painter.drawLine(QPointF(left, y), QPointF(right, y))
-            painter.setPen(QColor('#62748a'))
+            painter.setPen(color('#62748a', '#a3b5ca'))
             painter.drawText(8, int(y)+4, f'{maximum*index/2:.1f}')
         previous = None
-        painter.setPen(QPen(self.color, 2))
+        painter.setPen(QPen(color(self.color.name(), '#70e5c1' if self.color.name() == '#087f68' else '#84b6ff'), 2))
         for stamp, value in self.points:
             if value is None:
                 previous = None
@@ -86,7 +89,7 @@ class HistoryChart(QWidget):
                 painter.drawLine(previous, point)
             painter.drawEllipse(point, 2.5, 2.5)
             previous = point
-        painter.setPen(QColor('#62748a'))
+        painter.setPen(color('#62748a', '#a3b5ca'))
         painter.drawText(left, self.height()-12, datetime.fromtimestamp(first).strftime('%d.%m. %H:%M'))
         painter.drawText(max(left, right-110), self.height()-12,
                          datetime.fromtimestamp(last).strftime('%d.%m. %H:%M'))

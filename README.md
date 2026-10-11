@@ -232,3 +232,16 @@ Scanner-Messwerte an Grafana; dafür muss eine Datenquelle eingerichtet werden.
 Die erhaltene Datenbank `networkdb` kann jetzt für Grafana Cloud verwendet werden.
 Die lokale Synchronisierung und PDC-Konfiguration stehen in
 [dieser Anleitung](grafana/README.md). Cloud-Zugangsdaten bleiben lokal.
+
+## Darstellung einstellen
+
+Über **Einstellungen** in der oberen Button-Leiste:
+
+- **Geräteansicht:** Liste oder Karten. Beide zeigen alle bekannten Geräte;
+  ein Klick auf eine Karte öffnet dieselben Gerätedetails wie eine Tabellenzeile.
+- **Farbschema:** Hell oder Dunkel. Das gilt auch für Einstellungen,
+  Gerätedetails und Statistik einschließlich der Diagramme.
+
+Die Auswahl wird sofort angewendet und in `data/ui-settings.ini` gespeichert
+(bei anderem Datenbankpfad daneben). Standard: helle Listenansicht. Beim nächsten
+Start wird die zuletzt gespeicherte Darstellung geladen. Die Datei bleibt lokal.

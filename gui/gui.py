@@ -5,6 +5,7 @@ from datetime import datetime
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -14,12 +15,12 @@ try:
 except ImportError:
     from stats_view import StatisticsDialog
 
-from PyQt6.QtCore import QProcess, Qt, QTimer, QUrl
+from PyQt6.QtCore import QProcess, QSettings, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
-    QApplication, QAbstractItemView, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
+    QApplication, QAbstractItemView, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
-    QProgressBar, QScrollArea, QSpinBox, QVBoxLayout, QHBoxLayout, QWidget,
+    QListWidget, QListWidgetItem, QProgressBar, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
 
 GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/almljvn/netzwerkueberwachung-e28093-pi-5?from=now-5m&to=now&timezone=browser&refresh=5s"
@@ -63,6 +64,66 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QToolTip { background: #e8eef5; color: #17243a; border: 1px solid #cad5e3; padding: 6px; }
 """
 
+STYLE += """
+QListWidget { background: #ffffff; border: 1px solid #dce4ee; border-radius: 12px; padding: 8px; }
+QListWidget::item { background: transparent; border: none; }
+QPushButton#deviceCard { background: #f4f7fb; color: #243247; border: 1px solid #cad5e3;
+    text-align: left; padding: 18px; border-radius: 12px; font-weight: normal; }
+QPushButton#deviceCard:hover { background: #edf8f5; border-color: #16836c; }
+"""
+
+
+def theme_style(mode):
+    if mode == "light":
+        return STYLE
+    colors = {
+        "#243247": "#dce6f0", "#ffffff": "#111d2e", "#17243a": "#f5f9ff",
+        "#62748a": "#a3b5ca", "#f4f7fb": "#162235", "#dce4ee": "#34445c",
+        "#edf8f5": "#142f32", "#c9e9de": "#285c55", "#176a57": "#94e5d6",
+        "#cad5e3": "#405570", "#d7eee8": "#276e71", "#16836c": "#57debf",
+        "#f7f9fc": "#162337", "#dbeafe": "#254f64", "#e8eef5": "#23344b",
+        "#dde6f0": "#30465f", "#a4b5ca": "#6a819d", "#d3dfea": "#182639",
+        "#edf1f6": "#1a293d", "#8190a3": "#7f92ac", "#edf2f8": "#1e2d43",
+        "#4b6078": "#aebfd3", "#e1e9f2": "#1e3044", "#b6c5d7": "#405570",
+    }
+    style = re.sub(r"#[0-9a-f]{6}", lambda match: colors.get(match.group(), match.group()), STYLE)
+    return style + "QPushButton#scan { color: #ffffff; }"
+
+
+class AppearanceDialog(QDialog):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setWindowTitle("Einstellungen")
+        self.resize(430, 240)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        title = QLabel("Darstellung")
+        title.setObjectName("title")
+        layout.addWidget(title)
+        form = QFormLayout()
+        self.view = QComboBox()
+        self.view.addItem("Liste", "list")
+        self.view.addItem("Karten", "cards")
+        self.view.setCurrentIndex(self.view.findData(parent.view_mode))
+        form.addRow("Geräteansicht", self.view)
+        self.theme = QComboBox()
+        self.theme.addItem("Hell", "light")
+        self.theme.addItem("Dunkel", "dark")
+        self.theme.setCurrentIndex(self.theme.findData(parent.theme_mode))
+        form.addRow("Farbschema", self.theme)
+        layout.addLayout(form)
+        self.view.currentIndexChanged.connect(self.apply)
+        self.theme.currentIndexChanged.connect(self.apply)
+        note = QLabel("Änderungen werden sofort angewendet und gespeichert.")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        close = QPushButton("Schließen")
+        close.clicked.connect(self.close)
+        layout.addWidget(close)
+
+    def apply(self):
+        self.parent().apply_appearance(self.view.currentData(), self.theme.currentData())
+
 
 
 def read_devices(path):
@@ -92,6 +153,11 @@ class MonitorWindow(QMainWindow):
         super().__init__()
         self.db_path = str(Path(db_path).resolve())
         self.devices = []
+        self.settings = QSettings(str(Path(self.db_path).parent / "ui-settings.ini"), QSettings.Format.IniFormat)
+        self.view_mode = self.settings.value("appearance/view", "list")
+        self.theme_mode = self.settings.value("appearance/theme", "light")
+        self.appearance_window = None
+        self.card_buttons = {}
         self.detail_windows = {}
         self.statistics_window = None
         self.network_override = network
@@ -127,7 +193,7 @@ class MonitorWindow(QMainWindow):
         self.scan_button.setObjectName("scan")
         self.scan_button.clicked.connect(self.toggle_scanning)
         scan_controls.addWidget(self.scan_button)
-        button = QPushButton("Ansicht aktualisieren")
+        button = QPushButton("Aktualisieren")
         button.clicked.connect(self.refresh)
         scan_controls.addWidget(button)
         self.stats_button = QPushButton("Statistik")
@@ -136,13 +202,17 @@ class MonitorWindow(QMainWindow):
         self.grafana_button = QPushButton("Grafana")
         self.grafana_button.clicked.connect(self.open_grafana)
         scan_controls.addWidget(self.grafana_button)
+        self.settings_button = QPushButton("Einstellungen")
+        self.settings_button.clicked.connect(self.open_settings)
+        scan_controls.addWidget(self.settings_button)
         self.network_label = QLabel("Netz: automatische Erkennung")
-        self.network_label.setMinimumWidth(240)
+        self.network_label.setMinimumWidth(180)
         self.network_label.setObjectName("muted")
         scan_controls.addWidget(self.network_label)
-        scan_controls.addWidget(QLabel("Pause (Sekunden)"))
+        scan_controls.addWidget(QLabel("Scanpause"))
         self.scan_interval = QSpinBox()
         self.scan_interval.setRange(1, 86400)
+        self.scan_interval.setSuffix(" s")
         self.scan_interval.setValue(scan_interval)
         scan_controls.addWidget(self.scan_interval)
         layout.addWidget(toolbar)
@@ -170,7 +240,17 @@ class MonitorWindow(QMainWindow):
         self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(self.table)
+        self.cards = QListWidget()
+        self.cards.setViewMode(QListWidget.ViewMode.IconMode)
+        self.cards.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.cards.setMovement(QListWidget.Movement.Static)
+        self.cards.setWrapping(True)
+        self.cards.setSpacing(10)
+        self.cards.setGridSize(QSize(310, 190))
+        self.views = QStackedWidget()
+        self.views.addWidget(self.table)
+        self.views.addWidget(self.cards)
+        layout.addWidget(self.views)
         self.message = QLabel()
         self.message.setWordWrap(True)
         self.message.setObjectName("muted")
@@ -180,7 +260,29 @@ class MonitorWindow(QMainWindow):
         self.refresh_interval = interval * 1000
         self.timer.timeout.connect(self.refresh)
         self.timer.start(interval * 1000)
+        self.apply_appearance(self.view_mode, self.theme_mode)
         self.refresh()
+
+    def open_settings(self):
+        if self.appearance_window is None:
+            self.appearance_window = AppearanceDialog(self)
+        self.appearance_window.show()
+        self.appearance_window.raise_()
+        self.appearance_window.activateWindow()
+
+    def apply_appearance(self, view, theme):
+        self.view_mode = view if view in ("list", "cards") else "list"
+        self.theme_mode = theme if theme in ("light", "dark") else "light"
+        self.settings.setValue("appearance/view", self.view_mode)
+        self.settings.setValue("appearance/theme", self.theme_mode)
+        self.settings.sync()
+        self.setStyleSheet(theme_style(self.theme_mode))
+        self.views.setCurrentIndex(1 if self.view_mode == "cards" else 0)
+        self.render()
+        if self.statistics_window is not None:
+            self.statistics_window.update()
+            self.statistics_window.online_chart.update()
+            self.statistics_window.ping_chart.update()
 
     def open_grafana(self):
         if not QDesktopServices.openUrl(QUrl(GRAFANA_URL)):
@@ -197,7 +299,9 @@ class MonitorWindow(QMainWindow):
         item = self.table.item(row, 0)
         if item is None:
             return
-        ip = item.text()
+        self.open_device_by_ip(item.text())
+
+    def open_device_by_ip(self, ip):
         device = next((device for device in self.devices if device["ip"] == ip), None)
         if device is None:
             return
@@ -297,6 +401,8 @@ class MonitorWindow(QMainWindow):
             event.ignore()
             return
         event.accept()
+        if self.appearance_window is not None:
+            self.appearance_window.close()
         if self.statistics_window is not None:
             self.statistics_window.close()
         for dialog in list(self.detail_windows.values()):
@@ -341,8 +447,29 @@ class MonitorWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 item.setToolTip(value)
                 if column == 1:
-                    item.setForeground(QColor("#13795b" if device["online"] else "#a45716"))
+                    item.setForeground(QColor(("#70e5c1" if device["online"] else "#f5b580") if self.theme_mode == "dark" else ("#13795b" if device["online"] else "#a45716")))
                 self.table.setItem(row, column, item)
+
+        identities = [device["ip"] for device in devices]
+        if list(self.card_buttons) != identities:
+            self.cards.clear()
+            self.card_buttons = {}
+            for device in devices:
+                ip = device["ip"]
+                item = QListWidgetItem(self.cards)
+                item.setSizeHint(QSize(300, 180))
+                button = QPushButton()
+                button.setObjectName("deviceCard")
+                button.clicked.connect(lambda checked=False, ip=ip: self.open_device_by_ip(ip))
+                self.cards.setItemWidget(item, button)
+                self.card_buttons[ip] = button
+        for device in devices:
+            button = self.card_buttons[device["ip"]]
+            name = device.get("hostname") or "Unbekanntes Gerät"
+            name = button.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, 260)
+            status = "● Online" if device["online"] else "○ Offline"
+            button.setText(f"{name}\n{device['ip']}\n\n{status}   ·   Ping: {device.get('ping') or '—'}\n{device.get('mac') or 'MAC unbekannt'}")
+            button.setToolTip("Gerätedetails öffnen: " + device["ip"])
 
 
 class DeviceDetailsDialog(QDialog):
