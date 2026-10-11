@@ -76,3 +76,13 @@ Ein vorübergehender Ausfall von PostgreSQL beeinträchtigt lokale Scans nicht;
 der Sync-Dienst versucht die Übertragung erneut. Der letzte Scan wird erneut
 übertragen, damit nachträglich eingetragene Pingwerte übernommen werden.
 SQLite nicht während des laufenden Sync-Dienstes durch eine andere Datenbank ersetzen.
+
+## Fertiges Dashboard importieren
+
+Datei: `grafana/network-monitor-dashboard.json`.
+In Grafana **Dashboards → New → Import → Upload dashboard JSON file** wählen,
+die Datei hochladen und beim Import die getestete PostgreSQL-Datenquelle auswählen.
+Das Dashboard erhält eine neue ID und überschreibt kein vorhandenes Dashboard.
+Es enthält neun Panels: Geräte gesamt, online, offline, Alter des letzten Scans,
+Erreichbarkeitsverlauf, Pingverlauf, Geräteliste, Erreichbarkeitsquote und Dienste.
+Standard: letzte fünf Minuten, automatische Aktualisierung alle fünf Sekunden.
