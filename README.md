@@ -1,5 +1,10 @@
 # Netzwerk-Monitor für Raspberry Pi 5
 
+Die geplante Umstellung zum modularen IoT-Prototyp ist in der
+[IoT-Systemarchitektur](docs/iot-architektur.md) beschrieben. Sie enthält das
+Gesamtdiagramm, Modulgrenzen und den gemeinsamen Vertrag für Fake-Sensor und ESP32.
+Die folgende Anleitung beschreibt den vorhandenen Netzwerk-Monitor.
+
 Der Scanner prüft zuerst den gesamten IPv4-Netzbereich mit Nmap (`-sn`) und speichert bekannte Geräte in SQLite.
 Die native Qt-Desktopoberfläche zeigt Online-/Offline-Status, letzte Erreichbarkeit
 und letzte Prüfung mit lokalen Zeitangaben. Sie bietet einen einstellbares Scanintervall, einen
