@@ -254,6 +254,39 @@ def scan(db, network=NETWORK, timeout=300):
     print(f"\n{'=' * 65}\nScan abgeschlossen: {len(devices)} Geräte gefunden.", flush=True)
 
 
+def scan_target(db, ip, timeout=30):
+    """Monitor one configured sensor address without scanning surrounding devices."""
+    ip = str(ipaddress.IPv4Address(ip))
+    online = ip in discover_devices(f"{ip}/32", timeout)
+    checked = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with db:
+        scan_id = db.execute("INSERT INTO scans(checked,networks) VALUES(?,?)",
+                             (checked, f"{ip}/32")).lastrowid
+        db.execute("""INSERT INTO devices(ip,online,first_seen,last_seen,last_checked,ping)
+            VALUES(?,?,?,?,?,?) ON CONFLICT(ip) DO UPDATE SET
+            online=excluded.online,last_checked=excluded.last_checked,ping=excluded.ping,
+            last_seen=CASE WHEN excluded.online=1 THEN excluded.last_seen ELSE devices.last_seen END""",
+            (ip, int(online), checked, checked if online else "1970-01-01T00:00:00+00:00", checked,
+             "" if online else "keine Antwort"))
+        db.execute("INSERT INTO observations(scan_id,ip,online) VALUES(?,?,?)",
+                   (scan_id, ip, int(online)))
+    print(f"Sensorstatus aktualisiert: {ip}", flush=True)
+    if online:
+        info = get_device_info(ip, timeout)
+        with db:
+            db.execute("""UPDATE devices SET hostname=:hostname,mac=:mac,ping=:ping,
+                detail_error=:detail_error WHERE ip=:ip""", info)
+            match = re.fullmatch(r"(<)?(\d+(?:\.\d+)?) ms", info["ping"])
+            if match:
+                db.execute("UPDATE observations SET ping_ms=?,ping_upper_bound=? WHERE scan_id=? AND ip=?",
+                           (float(match.group(2)), int(bool(match.group(1))), scan_id, ip))
+        print(f"Sensorantwort aktualisiert: {ip}", flush=True)
+    with db:
+        db.execute("UPDATE devices SET connection_info=? WHERE ip=?",
+                   (json.dumps(get_connection_info(ip)), ip))
+    print(f"Scan abgeschlossen: Sensor {ip} geprüft.", flush=True)
+
+
 def main():
     def stop_requested(signum, frame):
         raise KeyboardInterrupt
@@ -267,6 +300,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=300, help="Zeitlimit pro Nmap-Aufruf in Sekunden")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--ports-ip", help="Nur Dienste eines Geräts abfragen")
+    parser.add_argument("--target-ip", help="Nur diesen Sensor überwachen, keine Netzwerksuche")
     args = parser.parse_args()
     if args.ports_ip:
         try:
@@ -283,6 +317,11 @@ def main():
             print(str(exc), file=sys.stderr)
             return 1
     network = args.network
+    if args.target_ip:
+        try:
+            args.target_ip = str(ipaddress.IPv4Address(args.target_ip))
+        except ValueError as exc:
+            parser.error(str(exc))
     if network != "auto":
         try:
             network = ipaddress.IPv4Network(network, strict=False)
@@ -300,7 +339,10 @@ def main():
     try:
         while True:
             try:
-                scan(db, network, args.timeout)
+                if args.target_ip:
+                    scan_target(db, args.target_ip, args.timeout)
+                else:
+                    scan(db, network, args.timeout)
             except (subprocess.SubprocessError, OSError, ValueError) as exc:
                 print(f"Geräteerkennung fehlgeschlagen: {exc}", file=sys.stderr, flush=True)
                 if args.once:

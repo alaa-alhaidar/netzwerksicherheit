@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 
 
-def load_statistics(path, hours):
+def load_statistics(path, hours, target_ip=None):
     empty = {"devices": [], "history": [], "availability": [], "services": []}
     if not Path(path).is_file():
         return empty
@@ -21,21 +21,25 @@ def load_statistics(path, hours):
         db.row_factory = sqlite3.Row
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if 'devices' in tables:
-            empty['devices'] = [dict(row) for row in db.execute('SELECT ip, online FROM devices')]
+            empty['devices'] = [dict(row) for row in db.execute(
+                'SELECT ip, online FROM devices WHERE (? IS NULL OR ip=?)', (target_ip, target_ip))]
         if {'scans', 'observations'} <= tables:
             empty['history'] = [dict(row) for row in db.execute('''
                 SELECT s.id, s.checked, count(o.ip) AS total,
                        coalesce(sum(o.online), 0) AS online,
                        avg(CASE WHEN o.ping_upper_bound=0 THEN o.ping_ms END) AS ping
                 FROM scans s LEFT JOIN observations o ON s.id=o.scan_id
-                WHERE s.checked>=? GROUP BY s.id ORDER BY s.id DESC LIMIT 400''', (cutoff,))][::-1]
+                WHERE s.checked>=? AND (? IS NULL OR o.ip=?)
+                GROUP BY s.id ORDER BY s.id DESC LIMIT 400''', (cutoff, target_ip, target_ip))][::-1]
             empty['availability'] = [dict(row) for row in db.execute('''
                 SELECT o.ip, count(*) AS samples, sum(o.online) AS online,
                        avg(CASE WHEN o.ping_upper_bound=0 THEN o.ping_ms END) AS ping
                 FROM observations o JOIN scans s ON s.id=o.scan_id
-                WHERE s.checked>=? GROUP BY o.ip ORDER BY o.ip''', (cutoff,))]
+                WHERE s.checked>=? AND (? IS NULL OR o.ip=?)
+                GROUP BY o.ip ORDER BY o.ip''', (cutoff, target_ip, target_ip))]
         if 'service_checks' in tables:
-            empty['services'] = [dict(row) for row in db.execute('SELECT * FROM service_checks ORDER BY ip')]
+            empty['services'] = [dict(row) for row in db.execute(
+                'SELECT * FROM service_checks WHERE (? IS NULL OR ip=?) ORDER BY ip', (target_ip, target_ip))]
     return empty
 
 
@@ -120,12 +124,12 @@ class StatisticsDialog(QDialog):
     def __init__(self, path, parent=None):
         super().__init__(parent)
         self.path = path
-        self.setWindowTitle('Netzwerk-Statistik')
+        self.setWindowTitle('Sensor-Statistik')
         self.resize(1100, 860)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
-        title = QLabel('Netzwerk-Statistik')
+        title = QLabel('Sensor-Statistik')
         title.setObjectName('title')
         layout.addWidget(title)
         controls = QHBoxLayout()
@@ -168,7 +172,7 @@ class StatisticsDialog(QDialog):
 
     def refresh(self):
         try:
-            data = load_statistics(self.path, self.period.currentData())
+            data = load_statistics(self.path, self.period.currentData(), getattr(self.parent(), 'target_ip', None))
             devices = data['devices']
             online = sum(row['online'] for row in devices)
             ports = sum(len(json.loads(row['ports'])) for row in data['services'])

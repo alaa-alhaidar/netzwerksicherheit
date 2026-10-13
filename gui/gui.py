@@ -110,6 +110,17 @@ class AppearanceDialog(QDialog):
         title.setObjectName("title")
         layout.addWidget(title)
         form = QFormLayout()
+        self.sensor_ip = QLineEdit(parent.target_ip)
+        self.sensor_ip.setPlaceholderText("IPv4-Adresse von alaa mac")
+        form.addRow("Sensor-IP", self.sensor_ip)
+        self.sensor_name = QLineEdit(parent.sensor_name)
+        form.addRow("Sensorname", self.sensor_name)
+        save_sensor = QPushButton("Sensor speichern")
+        save_sensor.clicked.connect(self.save_sensor)
+        form.addRow(save_sensor)
+        self.sensor_message = QLabel()
+        self.sensor_message.setWordWrap(True)
+        form.addRow(self.sensor_message)
         self.view = QComboBox()
         self.view.addItem("Liste", "list")
         self.view.addItem("Karten", "cards")
@@ -151,6 +162,14 @@ class AppearanceDialog(QDialog):
     def apply_led(self):
         self.parent().apply_led(self.led_enabled.isChecked(), self.led_pin.value())
 
+    def save_sensor(self):
+        try:
+            self.parent().set_sensor(self.sensor_ip.text().strip(), self.sensor_name.text().strip())
+        except ValueError as exc:
+            self.sensor_message.setText(str(exc))
+            return
+        self.sensor_message.setText("Sensor gespeichert. Nur diese IP wird überwacht.")
+
 
 
 def read_devices(path):
@@ -169,6 +188,8 @@ def read_devices(path):
 
 
 def local_time(value):
+    if value == "1970-01-01T00:00:00+00:00":
+        return "Noch keine Antwort"
     try:
         return datetime.fromisoformat(value).astimezone().strftime("%d.%m.%Y %H:%M:%S")
     except (ValueError, TypeError):
@@ -241,6 +262,8 @@ class MonitorWindow(QMainWindow):
         self.devices = []
         self.led_alarm = LEDAlarm(self)
         self.settings = QSettings(str(Path(self.db_path).parent / "ui-settings.ini"), QSettings.Format.IniFormat)
+        self.target_ip = self.settings.value("sensor/ip", "")
+        self.sensor_name = self.settings.value("sensor/name", "alaa mac")
         self.view_mode = self.settings.value("appearance/view", "list")
         self.theme_mode = self.settings.value("appearance/theme", "light")
         self.appearance_window = None
@@ -262,13 +285,13 @@ class MonitorWindow(QMainWindow):
         self.process.errorOccurred.connect(self.scan_error)
         self.scan_log = ""
         self.setStyleSheet(STYLE)
-        self.setWindowTitle("Netzwerk-Monitor · Raspberry Pi 5")
+        self.setWindowTitle("Sensor-Monitor · Raspberry Pi 5")
         self.resize(1400, 680)
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(18)
-        title = QLabel("Netzwerk-Monitor")
+        title = QLabel("Sensor-Monitor")
         title.setObjectName("title")
         heading = QHBoxLayout()
         heading.addWidget(title)
@@ -281,7 +304,7 @@ class MonitorWindow(QMainWindow):
         self.blink_timer = QTimer(self)
         self.blink_timer.setInterval(450)
         self.blink_timer.timeout.connect(self.blink_scan_indicator)
-        subtitle = QLabel("Dein Netzwerk im Blick · Geräte anklicken für Details")
+        subtitle = QLabel("Ein konfigurierter Sensor · Sensor anklicken für Details")
         subtitle.setObjectName("muted")
         layout.addWidget(subtitle)
         toolbar = QWidget()
@@ -302,7 +325,7 @@ class MonitorWindow(QMainWindow):
         self.settings_button = QPushButton("Einstellungen")
         self.settings_button.clicked.connect(self.open_settings)
         scan_controls.addWidget(self.settings_button)
-        self.network_label = QLabel("Netz: automatische Erkennung")
+        self.network_label = QLabel("Sensor: " + (self.target_ip or "noch nicht eingerichtet"))
         self.network_label.setMinimumWidth(180)
         self.network_label.setObjectName("muted")
         scan_controls.addWidget(self.network_label)
@@ -361,6 +384,26 @@ class MonitorWindow(QMainWindow):
         self.settings.setValue("hardware/led_pin", pin)
         self.settings.sync()
         self.led_alarm.configure(enabled, pin)
+
+    def set_sensor(self, ip, name):
+        try:
+            address = ipaddress.IPv4Address(ip)
+            if address.is_unspecified or address.is_multicast:
+                raise ValueError()
+        except ValueError:
+            raise ValueError("Bitte eine gültige IPv4-Adresse des Sensors eingeben.") from None
+        if self.scanning or self.process.state() != QProcess.ProcessState.NotRunning:
+            raise ValueError("Scanning vor dem Wechsel des Sensors stoppen.")
+        for dialog in list(self.detail_windows.values()) + list(self.connection_windows.values()):
+            dialog.close()
+        self.target_ip, self.sensor_name = str(address), name or "Sensor"
+        self.settings.setValue("sensor/ip", self.target_ip)
+        self.settings.setValue("sensor/name", self.sensor_name)
+        self.settings.sync()
+        self.network_label.setText("Sensor: " + self.target_ip)
+        self.refresh()
+        if self.statistics_window is not None:
+            self.statistics_window.refresh()
 
     def update_scan_indicator(self):
         color = status_color(True, self.theme_mode).name() if self.blink_on else ("#405570" if self.theme_mode == "dark" else "#cad5e3")
@@ -510,6 +553,10 @@ class MonitorWindow(QMainWindow):
     def start_scan(self):
         if self.process.state() != QProcess.ProcessState.NotRunning:
             return
+        if not self.target_ip:
+            self.message.setText("Unter Einstellungen zuerst die Sensor-IP eintragen.")
+            self.open_settings()
+            return
         self.scanning = True
         self.scan_log = ""
         self.scan_button.setEnabled(True)
@@ -519,9 +566,9 @@ class MonitorWindow(QMainWindow):
         self.blink_on = True
         self.update_scan_indicator()
         self.timer.setInterval(500)
-        self.message.setText("Geräte werden mit Nmap gesucht …")
+        self.message.setText("Sensor wird geprüft: " + self.target_ip)
         script = Path(__file__).resolve().parents[1] / "scanner" / "netz_monitor.py"
-        self.process.start(sys.executable, [str(script), "--network", self.network_override,
+        self.process.start(sys.executable, [str(script), "--target-ip", self.target_ip,
                                            "--db", self.db_path, "--once"])
 
     def scan_output(self):
@@ -601,6 +648,9 @@ class MonitorWindow(QMainWindow):
         except (sqlite3.Error, OSError, ValueError, KeyError) as exc:
             self.message.setText("Laden fehlgeschlagen; Anzeige enthält alte Daten: " + str(exc))
             return
+        devices = [device for device in devices if device["ip"] == self.target_ip]
+        for device in devices:
+            device["hostname"] = self.sensor_name
         self.devices = devices
         for device in devices:
             dialog = self.detail_windows.get(device["ip"])
@@ -614,7 +664,8 @@ class MonitorWindow(QMainWindow):
         if self.process.state() != QProcess.ProcessState.NotRunning or self.scanning:
             return
         if not devices:
-            self.message.setText("Noch keine Geräte erkannt. Scanner, Netzbereich und Datenbankpfad prüfen.")
+            self.message.setText("Sensor noch nicht geprüft. Scanning starten." if self.target_ip else
+                                 "Unter Einstellungen die IP-Adresse von alaa mac eintragen.")
         else:
             self.message.setText("Ansicht aktualisiert: " + datetime.now().strftime("%H:%M:%S")
                                  + " · Status entspricht dem letzten Scan.")

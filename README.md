@@ -1,15 +1,17 @@
-# Netzwerk-Monitor für Raspberry Pi 5
+# Sensor-Monitor für Raspberry Pi 5
 
 Die geplante Umstellung zum modularen IoT-Prototyp ist in der
 [IoT-Systemarchitektur](docs/iot-architektur.md) beschrieben. Sie enthält das
 Gesamtdiagramm, Modulgrenzen und den gemeinsamen Vertrag für Fake-Sensor und ESP32.
 Die folgende Anleitung beschreibt den vorhandenen Netzwerk-Monitor.
 
-Der Scanner prüft zuerst den gesamten IPv4-Netzbereich mit Nmap (`-sn`) und speichert bekannte Geräte in SQLite.
-Die native Qt-Desktopoberfläche zeigt Online-/Offline-Status, letzte Erreichbarkeit
-und letzte Prüfung mit lokalen Zeitangaben. Sie bietet einen einstellbares Scanintervall, einen
-Scan-Button und aktualisiert sich automatisch alle zehn Sekunden. Das dunkle
-Qt-Design zeigt eine Fortschrittsanzeige während des Scans.
+Die native Qt-Oberfläche überwacht genau einen Sensor mit konfigurierter IP-Adresse.
+Unter „Einstellungen“ werden Sensor-IP und Anzeigename gespeichert. Nmap und Ping
+prüfen nur diesen Sensor; Popups, GPIO-LED und lokale Statistik beziehen sich auf
+seine Erreichbarkeit. Aktueller Laborknoten: „alaa mac“, `192.168.178.103`.
+
+Der separate Scanner unterstützt weiterhin komplette IPv4-Netzbereiche für
+Diagnosezwecke. MQTT-Messwerte und PWA sind noch nicht implementiert.
 
 ```text
 scanner/netz_monitor.py   Netzwerk-Scanner
@@ -315,3 +317,27 @@ Bei Nutzung einer virtuellen Python-Umgebung gibt es ergänzend
 GPIO-Geräte. Fehlt dieser Zugriff, zeigt „LED-Status“ in den Einstellungen den
 Fehler an; Scans und Popups funktionieren weiterhin. Die Softwaretests verwenden
 simulierte Ausgänge; die physische LED muss am Pi überprüft werden.
+
+### Erste IoT-Umstellung: ein Sensor mit IP-Adresse
+
+Die Pi-Oberfläche ist jetzt ein Sensor-Monitor. Unter „Einstellungen“ werden genau
+eine Sensor-IP und ein Anzeigename hinterlegt; der vorgesehene erste Name ist
+„alaa mac“. Ohne konfigurierte IP startet keine Netzwerksuche. Nur der ausgewählte
+Sensor erscheint in Liste, Karten, lokaler Statistik und kritischen Alarmen.
+Andere gespeicherte IP-Adressen bleiben als bisherige Daten erhalten, werden aber
+in der Sensor-Oberfläche nicht berücksichtigt.
+
+„Scanning starten“ prüft gezielt diese einzelne IP mit Nmap und Ping, statt den
+Netzbereich nach weiteren Geräten abzusuchen. Ein noch nie erreichter Sensor zeigt
+„Noch keine Antwort“ als letzte Erreichbarkeit. Sensorwechsel ist bei gestopptem
+Scanning möglich; die Auswahl bleibt nach einem Neustart erhalten.
+
+Für die Kommandozeile:
+
+```bash
+python3 scanner/netz_monitor.py --target-ip <SENSOR-IP> --once
+```
+
+Der Docker-Scanner bleibt ein separat konfigurierbarer Netzwerk-Scanner. Das
+verlinkte bisherige Grafana-Dashboard wird durch diese lokale Auswahl nicht
+gefiltert. MQTT-Messwerte und die PWA folgen als eigene Umsetzungsschritte.
