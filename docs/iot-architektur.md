@@ -1,6 +1,7 @@
 # IoT-Prototyp: Systemarchitektur
 
-Stand: Entwurf für die Umstellung. MQTT, ESP32-Anbindung, Controller-Dienst und
+Stand: MQTT-Testsender für den Mac und MQTT→PostgreSQL-Empfänger sind implementiert
+(siehe [Mac-MQTT-Test](mqtt-mac-test.md)). ESP32-Anbindung, Controller-Alarmlogik und
 PWA sind noch nicht implementiert. Vorhanden sind Netzwerk-Scanner, Qt-Oberfläche,
 Statistik, PostgreSQL/Grafana-Abgleich und LED-Alarm an GPIO17.
 

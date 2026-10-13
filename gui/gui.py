@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
 
-GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/almljvn/netzwerkueberwachung-e28093-pi-5?from=now-5m&to=now&timezone=browser&refresh=5s"
+GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/al88sp8/sensor-124-e28093-umweltmonitor?from=now-5m&to=now&timezone=browser&refresh=5s"
 
 STYLE = """
 QWidget { color: #243247; font: 14px 'DejaVu Sans'; }

@@ -25,8 +25,8 @@
   ],
   "id": null,
   "uid": null,
-  "title": "Netzwerküberwachung – Pi 5",
-  "description": "Aktuelle Geräte und gespeicherter Scanverlauf aus networkdb. Geräte-Zahlen zeigen den letzten bekannten Zustand; Zeitfilter gelten für Verlauf und Erreichbarkeit.",
+  "title": "Sensor .124 – Umweltmonitor",
+  "description": "192.168.178.124: Netzwerkstatus und zuletzt empfangene Push-Messwerte. Ohne Messwerte im gewählten Zeitraum erscheint Keine Messdaten. Gas wird als Gaswiderstand angezeigt.",
   "tags": [
     "network-monitor",
     "postgresql",
@@ -34,7 +34,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 6,
   "editable": true,
   "graphTooltip": 1,
   "refresh": "5s",
@@ -69,8 +69,8 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 6,
-        "h": 4
+        "w": 8,
+        "h": 2
       },
       "fieldConfig": {
         "defaults": {
@@ -88,7 +88,10 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0,
+          "max": 1,
+          "decimals": 0
         },
         "overrides": []
       },
@@ -102,7 +105,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT count(*) AS \"Geräte gesamt\" FROM devices;"
+          "rawSql": "SELECT count(*) AS \"Geräte gesamt\" FROM devices WHERE ip='192.168.178.124';"
         }
       ],
       "options": {
@@ -117,8 +120,13 @@
         "graphMode": "none",
         "textMode": "auto",
         "orientation": "auto",
-        "justifyMode": "auto"
-      }
+        "justifyMode": "auto",
+        "text": {
+          "valueSize": 24,
+          "titleSize": 12
+        }
+      },
+      "description": "Nmap-Status ausschließlich für 192.168.178.124; bestätigt nicht den Empfang von Sensormesswerten."
     },
     {
       "id": 2,
@@ -129,10 +137,10 @@
         "uid": "${DS_POSTGRES}"
       },
       "gridPos": {
-        "x": 6,
+        "x": 8,
         "y": 0,
-        "w": 6,
-        "h": 4
+        "w": 8,
+        "h": 2
       },
       "fieldConfig": {
         "defaults": {
@@ -150,7 +158,10 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0,
+          "max": 1,
+          "decimals": 0
         },
         "overrides": []
       },
@@ -164,7 +175,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT count(*) AS \"Online\" FROM devices WHERE online=1;"
+          "rawSql": "SELECT count(*) AS \"Online\" FROM devices WHERE ip='192.168.178.124' AND online=1;"
         }
       ],
       "options": {
@@ -179,8 +190,13 @@
         "graphMode": "none",
         "textMode": "auto",
         "orientation": "auto",
-        "justifyMode": "auto"
-      }
+        "justifyMode": "auto",
+        "text": {
+          "valueSize": 24,
+          "titleSize": 12
+        }
+      },
+      "description": "Nmap-Status ausschließlich für 192.168.178.124; bestätigt nicht den Empfang von Sensormesswerten."
     },
     {
       "id": 3,
@@ -191,10 +207,10 @@
         "uid": "${DS_POSTGRES}"
       },
       "gridPos": {
-        "x": 12,
+        "x": 16,
         "y": 0,
-        "w": 6,
-        "h": 4
+        "w": 8,
+        "h": 2
       },
       "fieldConfig": {
         "defaults": {
@@ -212,7 +228,10 @@
                 "value": null
               }
             ]
-          }
+          },
+          "min": 0,
+          "max": 1,
+          "decimals": 0
         },
         "overrides": []
       },
@@ -226,7 +245,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT count(*) AS \"Offline\" FROM devices WHERE online=0;"
+          "rawSql": "SELECT count(*) AS \"Offline\" FROM devices WHERE ip='192.168.178.124' AND online=0;"
         }
       ],
       "options": {
@@ -241,12 +260,200 @@
         "graphMode": "none",
         "textMode": "auto",
         "orientation": "auto",
-        "justifyMode": "auto"
-      }
+        "justifyMode": "auto",
+        "text": {
+          "valueSize": 24,
+          "titleSize": 12
+        }
+      },
+      "description": "Nmap-Status ausschließlich für 192.168.178.124; bestätigt nicht den Empfang von Sensormesswerten."
     },
     {
-      "id": 4,
-      "title": "Letzter Scan vor …",
+      "id": 10,
+      "title": "Temperatur",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 6,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT temperature_c AS \"Temperatur\" FROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at DESC,id DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "orientation": "auto",
+        "justifyMode": "auto",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32,
+          "titleSize": 12
+        }
+      },
+      "description": "Letzter empfangener Wert im gewählten Zeitraum für 192.168.178.124."
+    },
+    {
+      "id": 11,
+      "title": "Luftdruck",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 2,
+        "w": 6,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurehpa",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT pressure_hpa AS \"Luftdruck\" FROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at DESC,id DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "orientation": "auto",
+        "justifyMode": "auto",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32,
+          "titleSize": 12
+        }
+      },
+      "description": "Letzter empfangener Wert im gewählten Zeitraum für 192.168.178.124."
+    },
+    {
+      "id": 12,
+      "title": "Luftfeuchtigkeit",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 2,
+        "w": 6,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "cyan"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT humidity_pct AS \"Luftfeuchtigkeit\" FROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at DESC,id DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "orientation": "auto",
+        "justifyMode": "auto",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32,
+          "titleSize": 12
+        }
+      },
+      "description": "Letzter empfangener Wert im gewählten Zeitraum für 192.168.178.124."
+    },
+    {
+      "id": 13,
+      "title": "Gas · Widerstand",
       "type": "stat",
       "datasource": {
         "type": "grafana-postgresql-datasource",
@@ -254,27 +461,20 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 0,
+        "y": 2,
         "w": 6,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "ohm",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
           "color": {
             "mode": "fixed",
             "fixedColor": "purple"
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
+          "mappings": []
         },
         "overrides": []
       },
@@ -288,7 +488,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT extract(epoch FROM now()-max(checked))::double precision AS \"Alter letzter Scan\" FROM scans;"
+          "rawSql": "SELECT gas_resistance_ohm AS \"Gas · Widerstand\" FROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at DESC,id DESC LIMIT 1;"
         }
       ],
       "options": {
@@ -299,12 +499,266 @@
           ],
           "fields": ""
         },
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
-        "textMode": "auto",
+        "textMode": "value",
         "orientation": "auto",
-        "justifyMode": "auto"
-      }
+        "justifyMode": "auto",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32,
+          "titleSize": 12
+        }
+      },
+      "description": "Letzter empfangener Wert im gewählten Zeitraum für 192.168.178.124. BME688-Gaswiderstand in Ohm; keine Gaskonzentration in ppm."
+    },
+    {
+      "id": 20,
+      "title": "Temperatur – Verlauf",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 6,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "mappings": [],
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisLabel": ""
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT received_at AS \"time\", temperature_c AS \"Temperatur\"\nFROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at,id;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "description": "Empfangene Messwerte von .124 im gewählten Zeitraum; Mac-Testwerte sind simuliert."
+    },
+    {
+      "id": 21,
+      "title": "Luftdruck – Verlauf",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 5,
+        "w": 6,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurehpa",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [],
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisLabel": ""
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT received_at AS \"time\", pressure_hpa AS \"Luftdruck\"\nFROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at,id;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "description": "Empfangene Messwerte von .124 im gewählten Zeitraum; Mac-Testwerte sind simuliert."
+    },
+    {
+      "id": 22,
+      "title": "Luftfeuchtigkeit – Verlauf",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 6,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "cyan"
+          },
+          "mappings": [],
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisLabel": ""
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT received_at AS \"time\", humidity_pct AS \"Luftfeuchtigkeit\"\nFROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at,id;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "description": "Empfangene Messwerte von .124 im gewählten Zeitraum; Mac-Testwerte sind simuliert."
+    },
+    {
+      "id": 23,
+      "title": "Gas · Widerstand – Verlauf",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRES}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 5,
+        "w": 6,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ohm",
+          "decimals": 1,
+          "noValue": "Keine Messdaten",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "mappings": [],
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisLabel": ""
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRES}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT received_at AS \"time\", gas_resistance_ohm AS \"Gas · Widerstand\"\nFROM sensor_measurements\nWHERE sensor_ip='192.168.178.124' AND $__timeFilter(received_at)\nORDER BY received_at,id;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "description": "Empfangene Messwerte von .124 im gewählten Zeitraum; Mac-Testwerte sind simuliert."
     },
     {
       "id": 5,
@@ -316,33 +770,28 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 10,
         "w": 12,
-        "h": 8
+        "h": 5
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "min": 0,
+          "max": 1,
+          "decimals": 0,
           "color": {
             "mode": "palette-classic"
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "fillOpacity": 12,
-            "showPoints": "auto",
-            "spanNulls": false
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisLabel": ""
           }
         },
         "overrides": []
@@ -357,24 +806,25 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "time_series",
-          "rawSql": "SELECT s.checked AS \"time\", coalesce(sum(o.online),0) AS \"Erreichbare Geräte\"\nFROM scans s LEFT JOIN observations o ON o.scan_id=s.id\nWHERE $__timeFilter(s.checked) GROUP BY s.id,s.checked ORDER BY s.checked,s.id;"
+          "rawSql": "SELECT s.checked AS \"time\", coalesce(sum(o.online),0) AS \"Erreichbare Geräte\"\nFROM scans s JOIN observations o ON o.scan_id=s.id\nWHERE o.ip='192.168.178.124' AND $__timeFilter(s.checked)\nGROUP BY s.id,s.checked ORDER BY s.checked,s.id;"
         }
       ],
       "options": {
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "description": "Anzahl erreichbarer Geräte pro Scan, ausschließlich 192.168.178.124: 1 = online, 0 = offline."
     },
     {
       "id": 6,
-      "title": "Ping je Gerät",
+      "title": "Latenz – 192.168.178.124",
       "type": "timeseries",
       "datasource": {
         "type": "grafana-postgresql-datasource",
@@ -382,33 +832,27 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 4,
+        "y": 10,
         "w": 12,
-        "h": 8
+        "h": 5
       },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
+          "min": 0,
+          "decimals": 1,
           "color": {
             "mode": "palette-classic"
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "fillOpacity": 12,
-            "showPoints": "auto",
-            "spanNulls": false
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisLabel": ""
           }
         },
         "overrides": []
@@ -423,204 +867,21 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "time_series",
-          "rawSql": "SELECT s.checked AS \"time\", o.ip AS metric, o.ping_ms AS value\nFROM observations o JOIN scans s ON s.id=o.scan_id\nWHERE $__timeFilter(s.checked) AND o.ping_ms IS NOT NULL AND o.ping_upper_bound=0\nORDER BY s.checked,s.id,o.ip;"
+          "rawSql": "SELECT s.checked AS \"time\", o.ip AS metric, o.ping_ms AS value\nFROM observations o JOIN scans s ON s.id=o.scan_id\nWHERE o.ip='192.168.178.124' AND $__timeFilter(s.checked)\nAND o.ping_ms IS NOT NULL AND o.ping_upper_bound=0\nORDER BY s.checked,s.id,o.ip;"
         }
       ],
       "options": {
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
-    },
-    {
-      "id": 7,
-      "title": "Alle bekannten Geräte",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_POSTGRES}"
       },
-      "gridPos": {
-        "x": 0,
-        "y": 12,
-        "w": 24,
-        "h": 9
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "Online": {
-                        "color": "green",
-                        "index": 0,
-                        "text": "Online"
-                      },
-                      "Offline": {
-                        "color": "orange",
-                        "index": 1,
-                        "text": "Offline"
-                      }
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_POSTGRES}"
-          },
-          "editorMode": "code",
-          "rawQuery": true,
-          "format": "table",
-          "rawSql": "SELECT ip AS \"IP-Adresse\", hostname AS \"Hostname\",\nCASE WHEN online=1 THEN 'Online' ELSE 'Offline' END AS \"Status\",\nmac AS \"MAC-Adresse\", ping AS \"Ping\", first_seen AS \"Erstmals erkannt\",\nlast_seen AS \"Zuletzt erreichbar\", last_checked AS \"Zuletzt geprüft\"\nFROM devices ORDER BY ip::inet;"
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
-      }
-    },
-    {
-      "id": 8,
-      "title": "Erreichbarkeit im gewählten Zeitraum",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_POSTGRES}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 21,
-        "w": 24,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_POSTGRES}"
-          },
-          "editorMode": "code",
-          "rawQuery": true,
-          "format": "table",
-          "rawSql": "SELECT o.ip AS \"IP-Adresse\", count(*) AS \"Messungen\",\nround(100.0*sum(o.online)/count(*),1) AS \"Erreichbar (%)\",\navg(CASE WHEN o.ping_upper_bound=0 THEN o.ping_ms END) AS \"Durchschnittlicher Ping (ms)\"\nFROM observations o JOIN scans s ON s.id=o.scan_id\nWHERE $__timeFilter(s.checked) GROUP BY o.ip ORDER BY o.ip::inet;"
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
-      },
-      "description": "Anteil erfolgreicher Geräteerkennungen, keine zeitbasierte Uptime. Fehlende und obere Ping-Grenzwerte zählen nicht zum Pingdurchschnitt."
-    },
-    {
-      "id": 9,
-      "title": "Dienste – letzte erfolgreiche Abfrage",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_POSTGRES}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 29,
-        "w": 24,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_POSTGRES}"
-          },
-          "editorMode": "code",
-          "rawQuery": true,
-          "format": "table",
-          "rawSql": "SELECT ip AS \"IP-Adresse\", checked AS \"Abgefragt am\",\ncoalesce((SELECT string_agg(service, ', ') FROM jsonb_array_elements_text(ports) AS p(service)),\n'keine getesteten Ports offen') AS \"Offene TCP-Dienste\"\nFROM service_checks ORDER BY ip::inet;"
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
-      },
-      "description": "Dienste werden nur beim Klick auf ein Gerät in der Qt-Oberfläche abgefragt. Dieses Panel startet keinen Portscan."
+      "description": "Gemessene Ping-Latenz für 192.168.178.124. Fehlende Messwerte und obere Ping-Grenzwerte werden nicht dargestellt."
     }
   ]
 }

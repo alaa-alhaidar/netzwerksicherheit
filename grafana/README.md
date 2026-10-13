@@ -111,3 +111,32 @@ bestehende Dashboard liest anschließend nur noch den ausgewählten Sensor aus
 PostgreSQL. Ein noch nicht gemessener Sensor wird nicht als online erfunden und
 erscheint in `devices` erst nach seiner ersten Prüfung. Beim Wechsel des Sensors
 werden die Messungen des neuen Sensors aus dem lokalen Archiv übernommen.
+
+## Einzelgerät 192.168.178.124
+
+Das Dashboard und die Beispielabfragen zeigen ausschließlich `192.168.178.124`, auch wenn ältere Geräte in der Datenbank gespeichert sind. Das geänderte Dashboard-JSON erneut in Grafana importieren. Der Scanner in `docker/compose.yaml` verwendet `--target-ip 192.168.178.124` und scannt nur diese Adresse (`/32`). Die Qt-Oberfläche nutzt ebenfalls das konfigurierte Sensorziel. Nach Änderung der Compose-Datei den Scanner mit `scripts/start.sh` neu starten, sofern dieser statt der Qt-Oberfläche verwendet wird.
+
+## Umweltmonitor mit vier Messwerten
+
+Das Dashboard enthält oben Geräte gesamt, Online und Offline für `.124` und darunter
+vier große Kacheln: Temperatur (°C), Luftdruck (hPa), Luftfeuchtigkeit (%) und
+Gaswiderstand (Ω). Die Statuszahlen stammen weiterhin vom Netzwerk-Scanner.
+
+Vor dem Import die neue Messwerttabelle anlegen:
+
+```bash
+sudo docker exec -i network-postgres psql -v ON_ERROR_STOP=1 -U networkuser -d networkdb < docker/postgres/sensor-measurements.sql
+```
+
+Anschließend `grafana/network-monitor-dashboard.json` in Grafana importieren.
+Der spätere Push-Empfänger muss echte Messwerte in `sensor_measurements` schreiben:
+`sensor_ip = '192.168.178.124'`, `temperature_c`, `pressure_hpa`, `humidity_pct`,
+`gas_resistance_ohm`; `received_at` ist die Empfangszeit. Der Nachrichtenvertrag
+steht in `docs/iot-architektur.md`. Der MQTT-Empfänger nutzt den vorhandenen Sync-Benutzer; die SQL-Datei ergänzt dessen Schreibrechte.
+
+Die Kacheln zeigen den letzten Wert im gewählten Zeitraum (standardmäßig fünf
+Minuten), sonst „Keine Messdaten“. Der MQTT-Testsender erzeugt ausdrücklich simulierte Messwerte. Einrichtung: [Mac-MQTT-Test](../docs/mqtt-mac-test.md).
+
+## Dashboard-Anordnung
+
+Oben bleiben Geräte gesamt, Online und Offline. Darunter stehen die vier Messwertanzeigen in einer Reihe, jeweils mit einer Nachkommastelle. Direkt darunter zeigt eine zweite Reihe die vier zugehörigen Messwertkurven. Ganz unten bleiben Geräteanzahl und Ping-Latenz nebeneinander. Alle Abfragen sind auf `.124` gefiltert.

@@ -8,3 +8,5 @@ docker/.env.pdc
 docker/bootstrap-cloud.sql
 router.json
 .router-*.tmp
+
+.venv-mqtt/
