@@ -8,7 +8,7 @@ Die folgende Anleitung beschreibt den vorhandenen Netzwerk-Monitor.
 Die native Qt-Oberfläche überwacht genau einen Sensor mit konfigurierter IP-Adresse.
 Unter „Einstellungen“ werden Sensor-IP und Anzeigename gespeichert. Nmap und Ping
 prüfen nur diesen Sensor; Popups, GPIO-LED und lokale Statistik beziehen sich auf
-seine Erreichbarkeit. Aktueller Laborknoten: „alaa mac“, `192.168.178.103`.
+seine Erreichbarkeit. Aktueller Laborknoten: „alaa mac“, `192.168.178.124`.
 
 Der separate Scanner unterstützt weiterhin komplette IPv4-Netzbereiche für
 Diagnosezwecke. MQTT-Messwerte und PWA sind noch nicht implementiert.
