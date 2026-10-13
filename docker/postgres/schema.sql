@@ -18,3 +18,6 @@ CREATE INDEX IF NOT EXISTS observations_ip ON observations(ip, scan_id);
 CREATE TABLE IF NOT EXISTS service_checks (
     ip TEXT PRIMARY KEY, checked TIMESTAMPTZ NOT NULL, ports JSONB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS registered_sensors (
+    ip TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1
+);

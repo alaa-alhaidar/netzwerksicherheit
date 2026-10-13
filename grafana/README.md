@@ -86,3 +86,28 @@ Das Dashboard erhält eine neue ID und überschreibt kein vorhandenes Dashboard.
 Es enthält neun Panels: Geräte gesamt, online, offline, Alter des letzten Scans,
 Erreichbarkeitsverlauf, Pingverlauf, Geräteliste, Erreichbarkeitsquote und Dienste.
 Standard: letzte fünf Minuten, automatische Aktualisierung alle fünf Sekunden.
+
+## IoT: PostgreSQL enthält nur manuell eingetragene Sensoren
+
+Grafana verwendet weiterhin dieselbe PostgreSQL-Datenquelle und dieselben Tabellen.
+Der Abgleich exportiert nur aktivierte Einträge aus `registered_sensors` sowie deren
+wirkliche Messungen. Andere Geräte, Beobachtungen und Dienste werden aus dem
+PostgreSQL-Monitor entfernt. Das ursprüngliche SQLite-Archiv bleibt auf dem Pi
+bestehen; seine übrigen Netzwerkgeräte werden nicht erneut exportiert.
+
+Einmal auf dem Pi im Projektverzeichnis ausführen:
+
+```bash
+bash scripts/apply-iot-sensors.sh
+```
+
+Das Skript übernimmt die manuelle Sensorwahl aus den Einstellungen, legt die
+PostgreSQL-Sensorliste an, vergibt die notwendigen Rechte für den Abgleich und
+startet dessen aktualisiertes Docker-Image. Anschließend zeigt es den tatsächlichen
+Inhalt von `devices` und die Zahl der Sensoren mit Messdaten. Docker benötigt sudo.
+
+Ein erneuter Dashboard-Import ist für die korrigierte Zählung nicht nötig. Das
+bestehende Dashboard liest anschließend nur noch den ausgewählten Sensor aus
+PostgreSQL. Ein noch nicht gemessener Sensor wird nicht als online erfunden und
+erscheint in `devices` erst nach seiner ersten Prüfung. Beim Wechsel des Sensors
+werden die Messungen des neuen Sensors aus dem lokalen Archiv übernommen.

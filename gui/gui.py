@@ -10,6 +10,9 @@ from pathlib import Path
 import sqlite3
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scanner.sensor_registry import register_sensor
+
 try:
     from .stats_view import StatisticsDialog
     from .led_alarm import LEDAlarm
@@ -165,7 +168,7 @@ class AppearanceDialog(QDialog):
     def save_sensor(self):
         try:
             self.parent().set_sensor(self.sensor_ip.text().strip(), self.sensor_name.text().strip())
-        except ValueError as exc:
+        except (ValueError, sqlite3.Error) as exc:
             self.sensor_message.setText(str(exc))
             return
         self.sensor_message.setText("Sensor gespeichert. Nur diese IP wird überwacht.")
@@ -264,6 +267,7 @@ class MonitorWindow(QMainWindow):
         self.settings = QSettings(str(Path(self.db_path).parent / "ui-settings.ini"), QSettings.Format.IniFormat)
         self.target_ip = self.settings.value("sensor/ip", "")
         self.sensor_name = self.settings.value("sensor/name", "alaa mac")
+        register_sensor(self.db_path, self.target_ip, self.sensor_name)
         self.view_mode = self.settings.value("appearance/view", "list")
         self.theme_mode = self.settings.value("appearance/theme", "light")
         self.appearance_window = None
@@ -396,6 +400,7 @@ class MonitorWindow(QMainWindow):
             raise ValueError("Scanning vor dem Wechsel des Sensors stoppen.")
         for dialog in list(self.detail_windows.values()) + list(self.connection_windows.values()):
             dialog.close()
+        register_sensor(self.db_path, str(address), name or "Sensor")
         self.target_ip, self.sensor_name = str(address), name or "Sensor"
         self.settings.setValue("sensor/ip", self.target_ip)
         self.settings.setValue("sensor/name", self.sensor_name)

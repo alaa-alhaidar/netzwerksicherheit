@@ -338,6 +338,24 @@ Für die Kommandozeile:
 python3 scanner/netz_monitor.py --target-ip <SENSOR-IP> --once
 ```
 
-Der Docker-Scanner bleibt ein separat konfigurierbarer Netzwerk-Scanner. Das
-verlinkte bisherige Grafana-Dashboard wird durch diese lokale Auswahl nicht
-gefiltert. MQTT-Messwerte und die PWA folgen als eigene Umsetzungsschritte.
+Der Docker-Scanner bleibt ein separat konfigurierbarer Netzwerk-Scanner. Nach der unten beschriebenen PostgreSQL-Umstellung enthält der
+Grafana-Abgleich ebenfalls nur den manuell ausgewählten Sensor. MQTT-Messwerte und die PWA folgen als eigene Umsetzungsschritte.
+
+### PostgreSQL-Abgleich für die IoT-Sensorüberwachung
+
+Grafana bleibt an PostgreSQL angebunden. Der Exporter übernimmt nur manuell in der
+Pi-Oberfläche eingetragene, aktivierte Sensoren und deren tatsächliche Prüfungen.
+Aktuell ist das genau „alaa mac“ (`192.168.178.124`). Andere Netzwerkgeräte werden
+nicht weiter nach PostgreSQL exportiert und aus dessen Monitor-Tabellen entfernt.
+Das lokale SQLite-Archiv bleibt erhalten.
+
+Einmal im Projektverzeichnis auf dem Pi ausführen:
+
+```bash
+bash scripts/apply-iot-sensors.sh
+```
+
+Dabei werden die Datenbankrechte angepasst und der aktualisierte Exporter gestartet.
+Das vorhandene Grafana-Dashboard zählt dann die wirklichen Zeilen in PostgreSQL;
+ein Import oder Wechsel der Datenquelle ist dafür nicht nötig. MQTT-Sensormesswerte
+sind weiterhin ein späterer Schritt; aktuell sind die realen Daten Nmap-/Ping-Prüfungen.

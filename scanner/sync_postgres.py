@@ -16,18 +16,28 @@ def snapshot(path, last_scan):
     with closing(sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
         db.execute('BEGIN')
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        if 'devices' not in tables:
+        # Without explicit enrollment there is no authorized sensor export.
+        if 'registered_sensors' not in tables:
             return None
         if 'scans' in tables and db.execute('SELECT coalesce(max(id),0) FROM scans').fetchone()[0] < last_scan:
             raise sqlite3.DatabaseError('SQLite-Scanverlauf wurde zurückgesetzt; Zielabgleich erforderlich')
         result = {}
+        result['registered_sensors'] = db.execute(
+            'SELECT ip,name,enabled FROM registered_sensors').fetchall()
+        names = {ip: name for ip, name, enabled in result['registered_sensors'] if enabled}
         columns = 'ip,online,first_seen,last_seen,last_checked,hostname,mac,ping,services,detail_error'
         available = {row[1] for row in db.execute('PRAGMA table_info(devices)')}
         select = ','.join(column if column in available else "''" for column in columns.split(','))
-        result['devices'] = db.execute('SELECT ' + select + ' FROM devices').fetchall()
+        result['devices'] = db.execute('SELECT ' + select + ' FROM devices').fetchall() if 'devices' in tables else []
         result['scans'] = db.execute('SELECT id,checked,networks FROM scans WHERE id>=? ORDER BY id', (last_scan,)).fetchall() if 'scans' in tables else []
         result['observations'] = db.execute('SELECT scan_id,ip,online,ping_ms,ping_upper_bound FROM observations WHERE scan_id>=?', (last_scan,)).fetchall() if 'observations' in tables else []
         result['service_checks'] = db.execute('SELECT ip,checked,ports FROM service_checks').fetchall() if 'service_checks' in tables else []
+        result['devices'] = [row[:5] + (names[row[0]],) + row[6:]
+                             for row in result['devices'] if row[0] in names]
+        result['observations'] = [row for row in result['observations'] if row[1] in names]
+        ids = {row[0] for row in result['observations']}
+        result['scans'] = [row for row in result['scans'] if row[0] in ids]
+        result['service_checks'] = [row for row in result['service_checks'] if row[0] in names]
         return result
 
 
@@ -37,7 +47,15 @@ def sync_once(path, connection):
     data = snapshot(path, last_scan)
     if data is None:
         return False
+    previous_ips = {row[0] for row in connection.execute(
+        'SELECT ip FROM registered_sensors WHERE enabled=1').fetchall()}
+    active_ips = {row[0] for row in data['registered_sensors'] if row[2]}
+    if previous_ips != active_ips:
+        data = snapshot(path, 0)  # Backfill real measurements of newly enrolled sensors.
     with connection.cursor() as cursor:
+        cursor.execute('UPDATE registered_sensors SET enabled=0')
+        cursor.executemany('''INSERT INTO registered_sensors(ip,name,enabled) VALUES(%s,%s,%s)
+            ON CONFLICT(ip) DO UPDATE SET name=excluded.name,enabled=excluded.enabled''', data['registered_sensors'])
         cursor.executemany('''INSERT INTO devices VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT(ip) DO UPDATE SET online=excluded.online, first_seen=excluded.first_seen,
             last_seen=excluded.last_seen,last_checked=excluded.last_checked,hostname=excluded.hostname,
@@ -49,6 +67,12 @@ def sync_once(path, connection):
             ping_ms=excluded.ping_ms,ping_upper_bound=excluded.ping_upper_bound''', data['observations'])
         cursor.executemany('''INSERT INTO service_checks VALUES (%s,%s,%s::jsonb)
             ON CONFLICT(ip) DO UPDATE SET checked=excluded.checked,ports=excluded.ports''', data['service_checks'])
+        # This database is the sensor mirror. The original SQLite archive stays intact.
+        for table in ('observations', 'service_checks', 'devices'):
+            cursor.execute(f'''DELETE FROM {table} WHERE NOT EXISTS (
+                SELECT 1 FROM registered_sensors r WHERE r.ip={table}.ip AND r.enabled=1)''')
+        cursor.execute('''DELETE FROM scans WHERE NOT EXISTS (
+            SELECT 1 FROM observations o WHERE o.scan_id=scans.id)''')
     return True
 
 
