@@ -5,6 +5,7 @@ import json
 import math
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -28,12 +29,28 @@ TELEMETRY_TOPIC = "iot/v1/nodes/pi-05/telemetry"
 ALARM_TOPIC = "iot/v1/nodes/pi-05/commands/alarm"
 ALARM_STATE_TOPIC = "iot/v1/nodes/pi-05/state/alarm"
 TOLERANCE_FILE = "/home/alaa/pi-control/tolerance.json"
+MONITOR_DB = os.getenv("MONITOR_DB", "/home/alaa/network-monitor~/data/monitor.sqlite3")
 RANGE_BOUNDS = {
     "temperature_c": (-100.0, 200.0),
     "pressure_hpa": (100.0, 1500.0),
     "humidity_pct": (0.0, 100.0),
     "gas_resistance_ohm": (0.0, 1_000_000_000.0),
 }
+
+
+def connected_devices():
+    """Return the devices enrolled in the Pi scanner with their latest state."""
+    with sqlite3.connect(MONITOR_DB, timeout=5) as database:
+        database.row_factory = sqlite3.Row
+        rows = database.execute("""
+            SELECT registered.ip, registered.name, devices.hostname,
+                   COALESCE(devices.online, 0) AS online, devices.last_checked
+            FROM registered_sensors AS registered
+            LEFT JOIN devices ON devices.ip = registered.ip
+            WHERE registered.enabled = 1
+            ORDER BY registered.ip
+        """).fetchall()
+    return {"devices": [dict(row) for row in rows]}
 
 
 def validate_ranges(value):
@@ -242,6 +259,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, receive_telemetry())
             except (OSError, TimeoutError) as error:
                 return self.send_json(503, {"error": str(error)})
+        if self.path == "/devices":
+            try:
+                return self.send_json(200, connected_devices())
+            except (OSError, sqlite3.Error) as error:
+                return self.send_json(503, {"error": f"Geräteliste nicht verfügbar: {error}"})
         if self.path == "/ranges":
             ranges = read_tolerance_state().get("ranges")
             try:
