@@ -2,6 +2,6 @@ FROM python:3.13-slim
 WORKDIR /app
 COPY scanner/requirements-postgres.txt scanner/requirements-mqtt.txt /app/
 RUN pip install --no-cache-dir -r requirements-postgres.txt -r requirements-mqtt.txt
-COPY scanner/telemetry.py scanner/mqtt_postgres.py /app/scanner/
+COPY scanner/telemetry.py scanner/temperature_alarm.py scanner/mqtt_postgres.py /app/scanner/
 ENV PYTHONUNBUFFERED=1
 CMD ["python", "-m", "scanner.mqtt_postgres"]

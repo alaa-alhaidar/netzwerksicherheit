@@ -11,7 +11,7 @@ services:
       dockerfile: docker/Dockerfile.sync
     network_mode: host
     env_file: .env.cloud
-    volumes: ["../data:/data"]
+    volumes: ["${MONITOR_DATA_DIR:-../data}:/data"]
     restart: unless-stopped
   pdc:
     image: grafana/pdc-agent:latest
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
   mqtt:
     image: eclipse-mosquitto:2
-    ports: ["127.0.0.1:1883:1883"]
+    ports: ["1883:1883"]
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mqtt_data:/mosquitto/data
@@ -39,7 +39,9 @@ services:
       MQTT_HOST: 127.0.0.1
       MQTT_PORT: 1883
       MQTT_NODE_ID: lab-01
-      SENSOR_IP: 192.168.178.124
+      SENSOR_IP: ${SENSOR_IP:-192.168.178.124}
+      MONITOR_DB: /data/monitor.sqlite3
+    volumes: ["${MONITOR_DATA_DIR:-../data}:/data"]
     depends_on: [mqtt, postgres]
     restart: unless-stopped
 

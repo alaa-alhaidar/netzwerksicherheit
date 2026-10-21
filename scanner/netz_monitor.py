@@ -301,6 +301,7 @@ def main():
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--ports-ip", help="Nur Dienste eines Geräts abfragen")
     parser.add_argument("--target-ip", help="Nur diesen Sensor überwachen, keine Netzwerksuche")
+    parser.add_argument("--registered-sensors", action="store_true", help="Alle manuell eingetragenen Geräte überwachen")
     args = parser.parse_args()
     if args.ports_ip:
         try:
@@ -339,7 +340,19 @@ def main():
     try:
         while True:
             try:
-                if args.target_ip:
+                if args.registered_sensors:
+                    try:
+                        from .sensor_registry import enabled_sensors
+                    except ImportError:
+                        from sensor_registry import enabled_sensors
+                    for ip, _ in enabled_sensors(db):
+                        try:
+                            scan_target(db, ip, args.timeout)
+                        except (subprocess.SubprocessError, OSError, ValueError) as exc:
+                            print(f"Geräteerkennung für {ip} fehlgeschlagen: {exc}", file=sys.stderr, flush=True)
+                            if args.once:
+                                return 1
+                elif args.target_ip:
                     scan_target(db, args.target_ip, args.timeout)
                 else:
                     scan(db, network, args.timeout)

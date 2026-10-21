@@ -71,3 +71,43 @@ class LEDAlarmTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ConnectionLEDTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
+    def test_gpio22_is_steady_on_when_connected_and_off_when_disconnected(self):
+        from gui.led_alarm import ConnectionLED
+        led, factory = Mock(), Mock()
+        indicator = ConnectionLED()
+        try:
+            with patch('gui.led_alarm.make_led', return_value=(led, factory)) as make:
+                indicator.configure()
+                make.assert_called_once_with(22)
+            indicator.set_active(True)
+            led.on.assert_called_once()
+            self.assertFalse(indicator.timer.isActive())
+            indicator.set_active(False)
+            led.off.assert_called()
+        finally:
+            indicator.close()
+        led.close.assert_called_once()
+        factory.close.assert_called_once()
+
+    def test_green_led_failure_does_not_disable_alarm_led(self):
+        from gui.led_alarm import ConnectionLED
+        indicator, alarm = ConnectionLED(), LEDAlarm()
+        led, factory = Mock(), Mock()
+        try:
+            with patch('gui.led_alarm.make_led', return_value=(led, factory)):
+                alarm.configure(True, 27)
+            with patch('gui.led_alarm.make_led', side_effect=OSError('busy')):
+                indicator.configure()
+            alarm.set_active(True)
+            self.assertTrue(alarm.timer.isActive())
+            led.on.assert_called_once()
+        finally:
+            indicator.close()
+            alarm.close()

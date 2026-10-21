@@ -91,3 +91,22 @@ class LEDAlarm(QObject):
                 except Exception:
                     pass
         self.led = self.factory = None
+
+
+class ConnectionLED(LEDAlarm):
+    """Steady green LED indicating the sensor's network connection."""
+
+    def configure(self, enabled=True, pin=22):
+        super().configure(enabled, pin)
+
+    def update_output(self):
+        if self.led is None:
+            return
+        try:
+            self.timer.stop()
+            if self.active:
+                self.led.on()
+            else:
+                self.led.off()
+        except Exception as exc:
+            self.fail(exc)

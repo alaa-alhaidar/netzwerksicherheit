@@ -52,16 +52,35 @@ In der Pi-Desktopsitzung im Projektverzeichnis:
 bash scripts/start-gui.sh
 ```
 
-**Scanning starten** drücken. Vor jedem Scan werden die aktiven lokalen
-IPv4-Netze automatisch über `ip -j -4 addr show up` ermittelt.
-Die Oberfläche zeigt die erkannten Netzbereiche an. Der Button startet den Python-Scanner wiederholt im Hintergrund:
-Er ruft zuerst `discover_devices()` auf und sammelt anschließend die Metadaten.
-Die Oberfläche bleibt bedienbar. Alle gefundenen Geräte erscheinen nach der
-Geräteerkennung; Hostname, MAC, Ping und Dienste folgen nach und nach.
-Die Liste zeigt alle bekannten Geräte einschließlich Offline-Geräten. Die Pause zwischen Scans ist einstellbar (Standard: 60 Sekunden). Nach Abschluss
-eines Scans wartet die Oberfläche diese Zeit und startet den nächsten Scan;
-Scans überlappen nicht. „Scanning stoppen“ beendet den laufenden Scan und die
-Wiederholungen. Nach Scanfehlern wird ebenfalls nach der Pause erneut versucht.
+Unter Einstellungen die Sensor-IP hinterlegen und **Dienste starten** drücken.
+Der Button startet Scanner, MQTT, Telemetrie, PostgreSQL und Synchronisierung
+über Docker Compose sowie die LED-Steuerung als systemd-Benutzerdienst.
+Docker Compose, die vorhandenen Cloud-Konfigurationsdateien und eine aktive
+systemd-Benutzersitzung sind erforderlich. Der Benutzer benötigt Docker- und GPIO-Zugriff.
+Der erste Start baut die Container und kann einige Minuten dauern.
+
+Die GUI liest die Datenbank und zeigt den Dienstestatus alle fünf Sekunden an.
+**Fenster schließen beendet keine Hintergrunddienste.** **Dienste stoppen** beendet
+die genannten Dienste einschließlich der LEDs; gespeicherte Daten bleiben erhalten.
+PWA und GUI verwenden dieselbe Dienstesteuerung (`scripts/control-services.py`).
+PWA-Start startet auch den Scanner; PWA-Stopp stoppt ihn und schaltet die
+LED-Ausgänge aus. Der gemeinsame Status berücksichtigt den Scanner.
+Sensor-IP und Scanpause werden aus `data/ui-settings.ini` übernommen.
+Gleichzeitige Start-/Stopp-Befehle werden nacheinander ausgeführt.
+Öffnen der GUI startet keine Dienste automatisch. Die Scanpause (Standard: 60 Sekunden)
+wird bei „Dienste starten“ übernommen. Nach einem Sensorwechsel die Dienste stoppen
+und erneut starten. Die Hintergrunddienste verwenden `monitor.sqlite3` im gewählten
+Datenverzeichnis. Bei installierten PWA-Benutzerdiensten werden `pi-mqtt`, `pi-telemetry` und
+`pi-alarm` sowie die PDC-Verbindung ebenfalls gestartet und gestoppt. Dabei
+werden kein zweiter MQTT-Broker und keine zweite GPIO-Steuerung gestartet.
+PWA und Steuerungs-API bleiben erreichbar; gespeicherte letzte Werte können
+weiterhin angezeigt werden, erhalten nach dem Stopp aber keine neuen Messungen.
+
+Die LED-Pins stehen in `gui/hardware_service.py` (`ALARM_LED_PIN = 17`,
+`CONNECTION_LED_PIN = 22`). Der Hardwaredienst läuft ohne sichtbares Fenster.
+Logs: `journalctl --user -u network-monitor-hardware.service`.
+Der Benutzerdienst überlebt das Schließen der GUI; ein Neustart des Pi oder
+vollständiges Abmelden benötigt einen erneuten Start des Hardwaredienstes.
 
 Ein Klick auf eine Gerätezeile öffnet ein eigenes Detailfenster mit IP, Status,
 Hostname, MAC, Ping, Diensten, erster Erkennung, letzter Erreichbarkeit, letzter
@@ -295,17 +314,18 @@ Verdrahtung für eine LED: GPIO17 (physischer Pin 11) → 470-Ω-Vorwiderstand �
 LED-Anode (+); LED-Kathode (−) → GND (physischer Pin 6).
 
 Unter „Einstellungen“ die Option „LED bei kritischem Alarm blinken lassen“
-aktivieren und „GPIO 17“ wählen. Die GPIO-Nummer ist die BCM-Nummer, nicht die
-physische Pinnummer. Die Einstellung wird lokal gespeichert. Ohne Aktivierung
-werden keine GPIO-Pins angesteuert.
+aktivieren. Den Alarm-Pin direkt in `gui/hardware_service.py` ändern (BCM-Nummer,
+nicht die physische Pinnummer). Die Option wird lokal gespeichert. Die grüne
+Verbindungs-LED verwendet GPIO22 unabhängig von dieser Alarmoption.
 
 Die LED blinkt mit 500 ms an / 500 ms aus, solange mindestens ein als kritisch
 markiertes Gerät offline ist oder keine Ping-Antwort liefert. Das Bestätigen eines
 Popups beendet nur die Bildschirmmeldung, nicht den LED-Alarm. Sobald alle
 kritischen Geräte wieder antworten oder die Markierungen entfernt werden, geht
-die LED aus. Beim Deaktivieren und Beenden werden LED und GPIO-Zugriff freigegeben.
+die LED aus. „Dienste stoppen“ gibt die GPIO-Ausgänge frei; Schließen der GUI lässt
+die LED-Steuerung weiterlaufen. Auch MQTT-Temperaturen von 41–45 °C lösen den Alarm aus.
 
-Die Ansteuerung läuft in der Desktop-GUI und verwendet GPIO Zero mit lgpio für
+Die Ansteuerung läuft im Hintergrunddienst und verwendet GPIO Zero mit lgpio für
 den Pi 5. Falls benötigt, auf dem Pi installieren:
 
 ```bash
@@ -327,10 +347,10 @@ Sensor erscheint in Liste, Karten, lokaler Statistik und kritischen Alarmen.
 Andere gespeicherte IP-Adressen bleiben als bisherige Daten erhalten, werden aber
 in der Sensor-Oberfläche nicht berücksichtigt.
 
-„Scanning starten“ prüft gezielt diese einzelne IP mit Nmap und Ping, statt den
+„Dienste starten“ prüft gezielt diese einzelne IP mit Nmap und Ping, statt den
 Netzbereich nach weiteren Geräten abzusuchen. Ein noch nie erreichter Sensor zeigt
-„Noch keine Antwort“ als letzte Erreichbarkeit. Sensorwechsel ist bei gestopptem
-Scanning möglich; die Auswahl bleibt nach einem Neustart erhalten.
+„Noch keine Antwort“ als letzte Erreichbarkeit. Nach einem Sensorwechsel die Dienste
+stoppen und starten; die Auswahl bleibt nach einem Neustart erhalten.
 
 Für die Kommandozeile:
 
@@ -359,3 +379,18 @@ Dabei werden die Datenbankrechte angepasst und der aktualisierte Exporter gestar
 Das vorhandene Grafana-Dashboard zählt dann die wirklichen Zeilen in PostgreSQL;
 ein Import oder Wechsel der Datenquelle ist dafür nicht nötig. MQTT-Sensormesswerte
 sind weiterhin ein späterer Schritt; aktuell sind die realen Daten Nmap-/Ping-Prüfungen.
+
+### Zwei Geräte manuell eintragen
+
+Unter **Einstellungen** können zwei Geräte mit jeweils eigener IPv4-Adresse und
+eigenem Namen gespeichert werden, etwa Arduino Nano und ESP32-CAM. Ein leeres
+zweites IP-Feld lässt weiterhin die Überwachung eines einzelnen Geräts zu.
+Bereits gespeicherte IPs und Namen bleiben erhalten; doppelte und ungültige IPs
+werden zurückgewiesen. Nach der Änderung **Dienste starten** drücken, damit
+der Scanner mit der neuen Konfiguration gebaut und gestartet wird. Er liest
+alle aktiv eingetragenen Geräte bei jedem Durchlauf aus `registered_sensors`.
+Die GUI und ihre Statistik zeigen nur diese ausgewählten Geräte.
+
+Unbekannte IP-Adressen findet man in der FRITZ!Box unter **Heimnetz → Netzwerk**.
+Ein ESP32-Hostname allein unterscheidet einen Nano ESP32 nicht sicher von einer
+ESP32-Kamera. Es werden keine Geräte-IP-Adressen automatisch zugeordnet.

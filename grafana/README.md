@@ -139,4 +139,4 @@ Minuten), sonst „Keine Messdaten“. Der MQTT-Testsender erzeugt ausdrücklich
 
 ## Dashboard-Anordnung
 
-Oben bleiben Geräte gesamt, Online und Offline. Darunter stehen die vier Messwertanzeigen in einer Reihe, jeweils mit einer Nachkommastelle. Direkt darunter zeigt eine zweite Reihe die vier zugehörigen Messwertkurven. Ganz unten bleiben Geräteanzahl und Ping-Latenz nebeneinander. Alle Abfragen sind auf `.124` gefiltert.
+Oben bleiben Geräte gesamt, Online und Offline. Darunter stehen die vier Messwertanzeigen in einer Reihe, jeweils mit zwei Nachkommastellen. Direkt darunter zeigt eine zweite Reihe die vier zugehörigen Messwertkurven. Ganz unten bleiben Geräteanzahl und Ping-Latenz nebeneinander. Alle Abfragen sind auf `.124` gefiltert.

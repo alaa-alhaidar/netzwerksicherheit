@@ -3,13 +3,14 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    command: ["python", "scanner/netz_monitor.py", "--target-ip", "192.168.178.124"]
+    command: ["python", "scanner/netz_monitor.py", "--registered-sensors"]
     network_mode: host
+    user: "${MONITOR_UID:-1000}:${MONITOR_GID:-1000}"
     cap_drop: [ALL]
     cap_add: [NET_RAW]
     environment:
       NETWORK_CIDR: ${NETWORK_CIDR:-auto}
       SCAN_INTERVAL: ${SCAN_INTERVAL:-60}
     volumes:
-      - ../data:/data
+      - ${MONITOR_DATA_DIR:-../data}:/data
     restart: unless-stopped

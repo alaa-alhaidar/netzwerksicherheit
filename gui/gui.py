@@ -11,24 +11,26 @@ import sqlite3
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scanner.sensor_registry import register_sensor
+from scanner.sensor_registry import register_sensors
+from scanner.temperature_alarm import read_temperature, temperature_in_alarm
 
 try:
     from .stats_view import StatisticsDialog
-    from .led_alarm import LEDAlarm
 except ImportError:
     from stats_view import StatisticsDialog
-    from led_alarm import LEDAlarm
 
 from PyQt6.QtCore import QProcess, QSettings, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QDialog, QFormLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QListWidget, QListWidgetItem, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
+    QListWidget, QListWidgetItem, QDoubleSpinBox, QScrollArea, QSpinBox,
+    QStackedWidget, QVBoxLayout, QHBoxLayout, QWidget,
 )
 
-GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/al88sp8/sensor-124-e28093-umweltmonitor?from=now-5m&to=now&timezone=browser&refresh=5s"
+GRAFANA_URL = "https://breezycaribou3208.grafana.net/d/alxjsgs/sensor-124-e28093-umweltmonitor?from=now-5m&to=now&timezone=browser&refresh=5s"
+TOLERANCE_STATE = Path("/home/alaa/pi-control/tolerance.json")
+
 
 STYLE = """
 QWidget { color: #243247; font: 14px 'DejaVu Sans'; }
@@ -39,18 +41,21 @@ QLabel#muted { color: #62748a; }
 QWidget#toolbar { background: #f4f7fb; border: 1px solid #dce4ee; border-radius: 12px; }
 QLabel#summary { background: #edf8f5; border: 1px solid #c9e9de; border-radius: 10px;
     padding: 14px 18px; color: #176a57; font-weight: bold; }
-QLineEdit, QSpinBox, QComboBox { background: #ffffff; border: 1px solid #cad5e3;
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background: #ffffff; border: 1px solid #cad5e3;
     border-radius: 8px; padding: 10px; selection-background-color: #d7eee8; }
-QLineEdit:focus, QSpinBox:focus { border: 1px solid #16836c; }
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus { border: 1px solid #16836c; }
 QComboBox QAbstractItemView { background: #f7f9fc; color: #243247;
     selection-background-color: #dbeafe; border: 1px solid #cad5e3; }
 QPushButton { background: #e8eef5; border: 1px solid #cad5e3;
     border-radius: 8px; padding: 11px 18px; font-weight: bold; }
 QPushButton:hover { background: #dde6f0; border-color: #a4b5ca; }
 QPushButton:pressed { background: #d3dfea; }
-QPushButton#scan { background: #087f68; color: #ffffff; border-color: #087f68; }
-QPushButton#scan:hover { background: #096b59; border-color: #096b59; }
-QPushButton#scan:pressed { background: #075647; }
+QPushButton#startServices:enabled { background: #087f68; color: #ffffff; border-color: #087f68; }
+QPushButton#startServices:enabled:hover { background: #096b59; border-color: #096b59; }
+QPushButton#startServices:enabled:pressed { background: #075647; }
+QPushButton#stopServices:enabled { background: #b91c1c; color: #ffffff; border-color: #b91c1c; }
+QPushButton#stopServices:enabled:hover { background: #991b1b; border-color: #991b1b; }
+QPushButton#stopServices:enabled:pressed { background: #7f1d1d; }
 QPushButton:disabled { background: #edf1f6; color: #8190a3; border-color: #dce4ee; }
 QTableWidget { background: #ffffff; alternate-background-color: #f7f9fc;
     border: 1px solid #dce4ee; border-radius: 12px; gridline-color: #e8eef5;
@@ -93,7 +98,7 @@ def theme_style(mode):
         "#16a34a": "#4ade80", "#dc2626": "#f87171",
     }
     style = re.sub(r"#[0-9a-f]{6}", lambda match: colors.get(match.group(), match.group()), STYLE)
-    return style + "QPushButton#scan { color: #ffffff; }"
+    return style + "QPushButton#startServices:enabled, QPushButton#stopServices:enabled { color: #ffffff; }"
 
 
 def status_color(online, theme):
@@ -106,7 +111,7 @@ class AppearanceDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("Einstellungen")
-        self.resize(430, 240)
+        self.resize(540, 720)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         title = QLabel("Darstellung")
@@ -114,11 +119,16 @@ class AppearanceDialog(QDialog):
         layout.addWidget(title)
         form = QFormLayout()
         self.sensor_ip = QLineEdit(parent.target_ip)
-        self.sensor_ip.setPlaceholderText("IPv4-Adresse von alaa mac")
-        form.addRow("Sensor-IP", self.sensor_ip)
+        self.sensor_ip.setPlaceholderText("z. B. Arduino Nano: 192.168.178.…")
+        form.addRow("Gerät 1 – IP", self.sensor_ip)
         self.sensor_name = QLineEdit(parent.sensor_name)
-        form.addRow("Sensorname", self.sensor_name)
-        save_sensor = QPushButton("Sensor speichern")
+        form.addRow("Gerät 1 – Name", self.sensor_name)
+        self.camera_ip = QLineEdit(parent.camera_ip)
+        self.camera_ip.setPlaceholderText("IPv4-Adresse der ESP32-CAM (optional)")
+        form.addRow("Gerät 2 – IP", self.camera_ip)
+        self.camera_name = QLineEdit(parent.camera_name)
+        form.addRow("Gerät 2 – Name", self.camera_name)
+        save_sensor = QPushButton("Geräte speichern")
         save_sensor.clicked.connect(self.save_sensor)
         form.addRow(save_sensor)
         self.sensor_message = QLabel()
@@ -137,21 +147,52 @@ class AppearanceDialog(QDialog):
         self.led_enabled = QCheckBox("LED bei kritischem Alarm blinken lassen")
         self.led_enabled.setChecked(parent.settings.value("hardware/led_enabled", False, type=bool))
         form.addRow("Hardware-Alarm", self.led_enabled)
-        self.led_pin = QSpinBox()
-        self.led_pin.setRange(2, 27)
-        self.led_pin.setPrefix("GPIO ")
-        self.led_pin.setValue(parent.settings.value("hardware/led_pin", 17, type=int))
-        self.led_pin.setToolTip("BCM-Nummer; GPIO17 entspricht dem physischen Pin 11.")
-        form.addRow("LED-Anschluss (BCM)", self.led_pin)
-        self.led_status = QLabel(parent.led_alarm.status)
+        self.led_status = QLabel(parent.hardware_status())
         self.led_status.setWordWrap(True)
         form.addRow("LED-Status", self.led_status)
-        parent.led_alarm.statusChanged.connect(self.led_status.setText)
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(lambda: self.led_status.setText(parent.hardware_status()))
+        self.status_timer.start(2000)
+        ranges = parent.load_alarm_ranges()
+        range_title = QLabel("Zulässige Sensorbereiche")
+        range_title.setStyleSheet("font-weight: bold; margin-top: 12px;")
+        form.addRow(range_title)
+        self.range_inputs = {}
+        range_specs = (
+            ("temperature_c", "Temperatur", " °C", -100, 200, 1),
+            ("pressure_hpa", "Luftdruck", " hPa", 100, 1500, 1),
+            ("humidity_pct", "Luftfeuchtigkeit", " %", 0, 100, 1),
+            ("gas_resistance_ohm", "Luftqualität", " kΩ", 0, 1_000_000, 2),
+        )
+        for key, caption, suffix, minimum, maximum, decimals in range_specs:
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            lower = QDoubleSpinBox()
+            upper = QDoubleSpinBox()
+            for field in (lower, upper):
+                field.setRange(minimum, maximum)
+                field.setDecimals(decimals)
+                field.setSuffix(suffix)
+            factor = 1000 if key == "gas_resistance_ohm" else 1
+            lower.setValue(ranges[key]["min"] / factor)
+            upper.setValue(ranges[key]["max"] / factor)
+            row_layout.addWidget(QLabel("Von"))
+            row_layout.addWidget(lower)
+            row_layout.addWidget(QLabel("Bis"))
+            row_layout.addWidget(upper)
+            form.addRow(caption, row)
+            self.range_inputs[key] = (lower, upper, factor)
+        save_ranges = QPushButton("Zulässige Bereiche speichern")
+        save_ranges.clicked.connect(self.save_ranges)
+        form.addRow(save_ranges)
+        self.range_message = QLabel()
+        self.range_message.setWordWrap(True)
+        form.addRow(self.range_message)
         layout.addLayout(form)
         self.view.currentIndexChanged.connect(self.apply)
         self.theme.currentIndexChanged.connect(self.apply)
         self.led_enabled.toggled.connect(self.apply_led)
-        self.led_pin.valueChanged.connect(self.apply_led)
         note = QLabel("Änderungen werden sofort angewendet und gespeichert.")
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -163,15 +204,30 @@ class AppearanceDialog(QDialog):
         self.parent().apply_appearance(self.view.currentData(), self.theme.currentData())
 
     def apply_led(self):
-        self.parent().apply_led(self.led_enabled.isChecked(), self.led_pin.value())
+        self.parent().apply_led(self.led_enabled.isChecked())
 
     def save_sensor(self):
         try:
-            self.parent().set_sensor(self.sensor_ip.text().strip(), self.sensor_name.text().strip())
+            self.parent().set_sensor(self.sensor_ip.text().strip(), self.sensor_name.text().strip(),
+                                     self.camera_ip.text().strip(), self.camera_name.text().strip())
         except (ValueError, sqlite3.Error) as exc:
             self.sensor_message.setText(str(exc))
             return
-        self.sensor_message.setText("Sensor gespeichert. Nur diese IP wird überwacht.")
+        self.sensor_message.setText("Geräte gespeichert. Beide eingetragenen IPs werden überwacht.")
+
+    def save_ranges(self):
+        values = {
+            key: {"min": lower.value() * factor, "max": upper.value() * factor}
+            for key, (lower, upper, factor) in self.range_inputs.items()
+        }
+        try:
+            self.parent().save_alarm_ranges(values)
+        except (ValueError, OSError, TypeError) as exc:
+            self.range_message.setText(str(exc))
+            return
+        self.range_message.setText(
+            "Bereiche gespeichert. Die automatische Alarmprüfung verwendet sie sofort."
+        )
 
 
 
@@ -263,11 +319,13 @@ class MonitorWindow(QMainWindow):
         super().__init__()
         self.db_path = str(Path(db_path).resolve())
         self.devices = []
-        self.led_alarm = LEDAlarm(self)
         self.settings = QSettings(str(Path(self.db_path).parent / "ui-settings.ini"), QSettings.Format.IniFormat)
         self.target_ip = self.settings.value("sensor/ip", "")
         self.sensor_name = self.settings.value("sensor/name", "alaa mac")
-        register_sensor(self.db_path, self.target_ip, self.sensor_name)
+        self.camera_ip = self.settings.value("camera/ip", "")
+        self.camera_name = self.settings.value("camera/name", "ESP32-CAM")
+        self.sensor_targets = {ip: name for ip, name in [(self.target_ip, self.sensor_name), (self.camera_ip, self.camera_name)] if ip}
+        register_sensors(self.db_path, list(self.sensor_targets.items()))
         self.view_mode = self.settings.value("appearance/view", "list")
         self.theme_mode = self.settings.value("appearance/theme", "light")
         self.appearance_window = None
@@ -278,16 +336,16 @@ class MonitorWindow(QMainWindow):
         self.offline_popups = {}
         self.statistics_window = None
         self.network_override = network
-        self.scanning = False
-        self.scan_timer = QTimer(self)
-        self.scan_timer.setSingleShot(True)
-        self.scan_timer.timeout.connect(self.start_scan)
-        self.process = QProcess(self)
-        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self.scan_output)
-        self.process.finished.connect(self.scan_finished)
-        self.process.errorOccurred.connect(self.scan_error)
-        self.scan_log = ""
+        self.service_process = QProcess(self)
+        self.service_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.service_process.finished.connect(self.services_finished)
+        self.service_process.errorOccurred.connect(self.services_error)
+        self.service_action = None
+        self.service_button_state = (True, True)
+        self.pending_service_action = None
+        self.closing = False
+        self.service_output = ""
+        self.service_process.readyReadStandardOutput.connect(self.services_output)
         self.setStyleSheet(STYLE)
         self.setWindowTitle("Sensor-Monitor · Raspberry Pi 5")
         self.resize(1400, 680)
@@ -305,10 +363,7 @@ class MonitorWindow(QMainWindow):
         heading.addStretch()
         layout.addLayout(heading)
         self.blink_on = False
-        self.blink_timer = QTimer(self)
-        self.blink_timer.setInterval(450)
-        self.blink_timer.timeout.connect(self.blink_scan_indicator)
-        subtitle = QLabel("Ein konfigurierter Sensor · Sensor anklicken für Details")
+        subtitle = QLabel("Arduino Nano und ESP32-CAM · Gerät anklicken für Details")
         subtitle.setObjectName("muted")
         layout.addWidget(subtitle)
         toolbar = QWidget()
@@ -316,10 +371,14 @@ class MonitorWindow(QMainWindow):
         scan_controls = QHBoxLayout(toolbar)
         scan_controls.setContentsMargins(16, 14, 16, 14)
         scan_controls.setSpacing(12)
-        self.scan_button = QPushButton("Scanning starten")
-        self.scan_button.setObjectName("scan")
-        self.scan_button.clicked.connect(self.toggle_scanning)
-        scan_controls.addWidget(self.scan_button)
+        self.start_services_button = QPushButton("Dienste starten")
+        self.start_services_button.setObjectName("startServices")
+        self.start_services_button.clicked.connect(lambda: self.control_services("start"))
+        scan_controls.addWidget(self.start_services_button)
+        self.stop_services_button = QPushButton("Dienste stoppen")
+        self.stop_services_button.setObjectName("stopServices")
+        self.stop_services_button.clicked.connect(lambda: self.control_services("stop"))
+        scan_controls.addWidget(self.stop_services_button)
         self.stats_button = QPushButton("Statistik")
         self.stats_button.clicked.connect(self.open_statistics)
         scan_controls.addWidget(self.stats_button)
@@ -329,7 +388,7 @@ class MonitorWindow(QMainWindow):
         self.settings_button = QPushButton("Einstellungen")
         self.settings_button.clicked.connect(self.open_settings)
         scan_controls.addWidget(self.settings_button)
-        self.network_label = QLabel("Sensor: " + (self.target_ip or "noch nicht eingerichtet"))
+        self.network_label = QLabel("Geräte: " + (", ".join(self.sensor_targets) or "noch nicht eingerichtet"))
         self.network_label.setMinimumWidth(180)
         self.network_label.setObjectName("muted")
         scan_controls.addWidget(self.network_label)
@@ -337,9 +396,18 @@ class MonitorWindow(QMainWindow):
         self.scan_interval = QSpinBox()
         self.scan_interval.setRange(1, 86400)
         self.scan_interval.setSuffix(" s")
-        self.scan_interval.setValue(scan_interval)
+        self.scan_interval.setValue(self.settings.value("scanner/interval", scan_interval, type=int))
+        self.scan_interval.valueChanged.connect(self.save_scan_interval)
+        self.scan_interval.setToolTip("Wird beim nächsten Klick auf Dienste starten übernommen.")
         scan_controls.addWidget(self.scan_interval)
         layout.addWidget(toolbar)
+        self.service_status = QLabel("Dienstestatus wird geprüft …")
+        self.service_status.setWordWrap(True)
+        self.service_status.setObjectName("muted")
+        layout.addWidget(self.service_status)
+        self.service_error = QLabel()
+        self.service_error.setWordWrap(True)
+        layout.addWidget(self.service_error)
         self.summary = QLabel()
         self.summary.setObjectName("summary")
         layout.addWidget(self.summary)
@@ -379,33 +447,95 @@ class MonitorWindow(QMainWindow):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(interval * 1000)
         self.apply_appearance(self.view_mode, self.theme_mode)
-        self.led_alarm.configure(self.settings.value("hardware/led_enabled", False, type=bool),
-                                 self.settings.value("hardware/led_pin", 17, type=int))
         self.refresh()
+        self.alarm_timer = QTimer(self)
+        self.alarm_timer.setInterval(1000)
+        self.alarm_timer.timeout.connect(self.check_critical_devices)
+        self.alarm_timer.start()
+        self.service_timer = QTimer(self)
+        self.service_timer.timeout.connect(lambda: self.control_services("status"))
+        self.service_timer.start(5000)
+        QTimer.singleShot(0, lambda: self.control_services("status"))
 
-    def apply_led(self, enabled, pin):
+    def apply_led(self, enabled):
         self.settings.setValue("hardware/led_enabled", enabled)
-        self.settings.setValue("hardware/led_pin", pin)
         self.settings.sync()
-        self.led_alarm.configure(enabled, pin)
 
-    def set_sensor(self, ip, name):
+    def save_scan_interval(self, interval):
+        self.settings.setValue("scanner/interval", interval)
+        self.settings.sync()
+
+    def load_alarm_ranges(self):
+        fallback = {
+            "temperature_c": {"min": 20.0, "max": 26.0},
+            "pressure_hpa": {"min": 950.0, "max": 1050.0},
+            "humidity_pct": {"min": 35.0, "max": 65.0},
+            "gas_resistance_ohm": {"min": 50_000.0, "max": 200_000.0},
+        }
         try:
-            address = ipaddress.IPv4Address(ip)
-            if address.is_unspecified or address.is_multicast:
-                raise ValueError()
-        except ValueError:
-            raise ValueError("Bitte eine gültige IPv4-Adresse des Sensors eingeben.") from None
-        if self.scanning or self.process.state() != QProcess.ProcessState.NotRunning:
-            raise ValueError("Scanning vor dem Wechsel des Sensors stoppen.")
+            state = json.loads(TOLERANCE_STATE.read_text(encoding="utf-8"))
+            ranges = state.get("ranges")
+            if not isinstance(ranges, dict):
+                return fallback
+            for key in fallback:
+                limits = ranges.get(key)
+                if (not isinstance(limits, dict)
+                        or not isinstance(limits.get("min"), (int, float))
+                        or not isinstance(limits.get("max"), (int, float))
+                        or limits["min"] >= limits["max"]):
+                    return fallback
+            return ranges
+        except (OSError, ValueError, TypeError):
+            return fallback
+
+    def save_alarm_ranges(self, ranges):
+        bounds = {
+            "temperature_c": (-100.0, 200.0),
+            "pressure_hpa": (100.0, 1500.0),
+            "humidity_pct": (0.0, 100.0),
+            "gas_resistance_ohm": (0.0, 1_000_000_000.0),
+        }
+        cleaned = {}
+        for key, (lowest, highest) in bounds.items():
+            limits = ranges.get(key, {})
+            minimum, maximum = limits.get("min"), limits.get("max")
+            if minimum is None or maximum is None or minimum >= maximum:
+                raise ValueError(f"Minimum muss kleiner als Maximum sein ({key}).")
+            if minimum < lowest or maximum > highest:
+                raise ValueError(f"Bereich für {key} liegt außerhalb der erlaubten Grenzen.")
+            cleaned[key] = {"min": float(minimum), "max": float(maximum)}
+        try:
+            state = json.loads(TOLERANCE_STATE.read_text(encoding="utf-8"))
+            if not isinstance(state, dict):
+                state = {}
+        except (OSError, ValueError, TypeError):
+            state = {}
+        state["ranges"] = cleaned
+        state["updated_at"] = datetime.now().astimezone().isoformat()
+        TOLERANCE_STATE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = TOLERANCE_STATE.with_suffix(".gui.tmp")
+        temporary.write_text(json.dumps(state), encoding="utf-8")
+        temporary.replace(TOLERANCE_STATE)
+
+    def set_sensor(self, ip, name, camera_ip="", camera_name="ESP32-CAM"):
+        targets = [(address, label) for address, label in [(ip, name), (camera_ip, camera_name)] if address]
+        if not targets:
+            raise ValueError("Bitte mindestens eine Geräte-IP eingeben.")
+        if self.service_action in ("start", "stop"):
+            raise ValueError("Bitte warten, bis die Dienstesteuerung abgeschlossen ist.")
         for dialog in list(self.detail_windows.values()) + list(self.connection_windows.values()):
             dialog.close()
-        register_sensor(self.db_path, str(address), name or "Sensor")
-        self.target_ip, self.sensor_name = str(address), name or "Sensor"
+        register_sensors(self.db_path, targets)
+        self.target_ip, self.sensor_name = ip, name or "Arduino Nano"
+        self.camera_ip, self.camera_name = camera_ip, camera_name or "ESP32-CAM"
+        self.sensor_targets = dict(targets)
+        self.settings.setValue("camera/ip", self.camera_ip)
+        self.settings.setValue("camera/name", self.camera_name)
         self.settings.setValue("sensor/ip", self.target_ip)
         self.settings.setValue("sensor/name", self.sensor_name)
         self.settings.sync()
-        self.network_label.setText("Sensor: " + self.target_ip)
+        self.network_label.setText("Geräte: " + ", ".join(self.sensor_targets))
+        self.service_error.setText("Sensor geändert. Dienste stoppen und starten, um die neue IP zu übernehmen.")
         self.refresh()
         if self.statistics_window is not None:
             self.statistics_window.refresh()
@@ -413,11 +543,7 @@ class MonitorWindow(QMainWindow):
     def update_scan_indicator(self):
         color = status_color(True, self.theme_mode).name() if self.blink_on else ("#405570" if self.theme_mode == "dark" else "#cad5e3")
         self.scan_indicator.setStyleSheet(f"font-size: 20px; color: {color};")
-        self.scan_indicator.setToolTip("Scan läuft" if self.blink_timer.isActive() else "Kein Scan aktiv")
-
-    def blink_scan_indicator(self):
-        self.blink_on = not self.blink_on
-        self.update_scan_indicator()
+        self.scan_indicator.setToolTip("Hintergrunddienste aktiv" if self.blink_on else "Dienste gestoppt oder unvollständig")
 
     def open_settings(self):
         if self.appearance_window is None:
@@ -492,7 +618,7 @@ class MonitorWindow(QMainWindow):
         dialog.activateWindow()
 
     def is_critical(self, ip):
-        return self.settings.value(f"devices/{ip}/critical", False, type=bool)
+        return self.settings.value(f"devices/{ip}/critical", ip in getattr(self, "sensor_targets", {self.target_ip: ""}), type=bool)
 
     def set_critical(self, ip, critical):
         self.settings.setValue(f"devices/{ip}/critical", bool(critical))
@@ -501,10 +627,35 @@ class MonitorWindow(QMainWindow):
         self.check_critical_devices()
 
     def check_critical_devices(self, repeat=False):
-        offline = {device["ip"]: device for device in self.devices
-                   if self.is_critical(device["ip"]) and
-                   (not device["online"] or device.get("ping") == "keine Antwort")}
-        self.led_alarm.set_active(bool(offline))
+        offline = {}
+        reasons = {}
+        try:
+            reading = read_temperature(self.db_path, self.target_ip)
+        except (sqlite3.Error, OSError):
+            # A failed read does not clear an active temperature alarm.
+            reading = getattr(self, "last_temperature", None)
+        else:
+            self.last_temperature = reading
+        alarm_devices = list(self.devices)
+        if reading is not None and not any(device["ip"] == self.target_ip for device in alarm_devices):
+            alarm_devices.append({"ip": self.target_ip, "hostname": getattr(self, "sensor_name", "Sensor"),
+                                  "online": True, "ping": ""})
+        for device in alarm_devices:
+            ip = device["ip"]
+            if not self.is_critical(ip):
+                continue
+            causes = []
+            if not device["online"] or device.get("ping") == "keine Antwort":
+                causes.append("Sensor antwortet nicht (WLAN/Netzwerk).")
+            if ip == self.target_ip and temperature_in_alarm(reading):
+                causes.append(f"Temperatur {reading[0]:.1f} °C im Alarmbereich 41–45 °C.")
+            if causes:
+                offline[ip] = device
+                reasons[ip] = "\n".join(causes)
+            # Update open warnings when a second cause appears or one cause clears.
+        for ip, popup in self.offline_popups.items():
+            if ip in reasons:
+                popup.setInformativeText(reasons[ip])
         for ip in list(self.offline_popups):
             if ip not in offline:
                 self.offline_popups[ip].close()
@@ -523,12 +674,12 @@ class MonitorWindow(QMainWindow):
                 continue
             popup = QMessageBox(self)
             popup.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-            popup.setWindowTitle("Kritisches Gerät antwortet nicht")
+            popup.setWindowTitle("Kritischer Sensoralarm")
             popup.setIcon(QMessageBox.Icon.Warning)
             popup.setTextFormat(Qt.TextFormat.PlainText)
             name = device.get("hostname") or "Unbekanntes Gerät"
-            popup.setText(f"Das kritische Gerät {name} ({ip}) antwortet nicht.")
-            popup.setInformativeText("Bereits die erste fehlende Antwort löst diese Warnung aus.")
+            popup.setText(f"Alarm für das kritische Gerät {name} ({ip}).")
+            popup.setInformativeText(reasons[ip])
             popup.setStandardButtons(QMessageBox.StandardButton.Ok)
             popup.setWindowModality(Qt.WindowModality.NonModal)
             self.offline_popups[ip] = popup
@@ -537,100 +688,99 @@ class MonitorWindow(QMainWindow):
             popup.raise_()
             popup.activateWindow()
 
-    def toggle_scanning(self):
-        if self.scanning:
-            self.scanning = False
-            self.scan_timer.stop()
-            if self.process.state() != QProcess.ProcessState.NotRunning:
-                self.process.terminate()
-                self.scan_button.setEnabled(False)
-                QTimer.singleShot(1500, self.stop_scan)
-            else:
-                self.reset_scan_controls()
-            self.message.setText("Scanning gestoppt")
-        else:
-            self.start_scan()
+    def hardware_status(self):
+        try:
+            state = json.loads((Path(self.db_path).parent / "hardware-status.json").read_text())
+            return state.get("alarm", "Hardwaredienst wartet auf Daten")
+        except (OSError, ValueError, AttributeError):
+            return "Hardwaredienst nicht aktiv oder noch keine Daten"
 
-    def schedule_scan(self):
-        if self.scanning:
-            self.scan_timer.start(self.scan_interval.value() * 1000)
-
-    def start_scan(self):
-        if self.process.state() != QProcess.ProcessState.NotRunning:
+    def control_services(self, action):
+        if self.closing:
             return
-        if not self.target_ip:
+        if self.service_process.state() != QProcess.ProcessState.NotRunning:
+            if self.service_action == "status" and action != "status":
+                self.pending_service_action = action
+            return
+        if action == "start" and not self.sensor_targets:
             self.message.setText("Unter Einstellungen zuerst die Sensor-IP eintragen.")
             self.open_settings()
             return
-        self.scanning = True
-        self.scan_log = ""
-        self.scan_button.setEnabled(True)
-        self.scan_button.setText("Scanning stoppen")
-        self.scan_interval.setEnabled(False)
-        self.blink_timer.start()
-        self.blink_on = True
-        self.update_scan_indicator()
-        self.timer.setInterval(500)
-        self.message.setText("Sensor wird geprüft: " + self.target_ip)
-        script = Path(__file__).resolve().parents[1] / "scanner" / "netz_monitor.py"
-        self.process.start(sys.executable, [str(script), "--target-ip", self.target_ip,
-                                           "--db", self.db_path, "--once"])
+        self.service_action = action
+        self.service_output = ""
+        if action != "status":
+            self.service_error.clear()
+            self.start_services_button.setEnabled(False)
+            self.stop_services_button.setEnabled(False)
+            self.scan_interval.setEnabled(False)
+            self.message.setText("Dienste werden gestartet …" if action == "start" else "Dienste werden gestoppt …")
+        script = Path(__file__).resolve().parents[1] / "scripts/control-services.py"
+        self.service_process.start(sys.executable, [str(script), action, "--db", self.db_path,
+                                  "--target", (self.target_ip or self.camera_ip), "--interval", str(self.scan_interval.value())])
 
-    def scan_output(self):
-        if not self.process.isOpen():
-            return
-        output = bytes(self.process.readAllStandardOutput()).decode(errors="replace")
-        self.scan_log = (self.scan_log + output)[-8000:]
-        for line in self.scan_log.splitlines():
-            if line.startswith("Erkannte Netze: "):
-                self.network_label.setText("Netz: " + line.removeprefix("Erkannte Netze: "))
-        lines = output.strip().splitlines()
-        if lines:
-            self.message.setText(lines[-1])
-        self.refresh()
+    def services_output(self):
+        self.service_output += bytes(self.service_process.readAllStandardOutput()).decode(errors="replace")
 
-    def reset_scan_controls(self):
-        self.scan_button.setEnabled(True)
-        self.scan_button.setText("Scanning stoppen" if self.scanning else "Scanning starten")
-        self.scan_interval.setEnabled(not self.scanning)
-        self.blink_timer.stop()
-        self.blink_on = False
-        self.update_scan_indicator()
-        self.timer.setInterval(self.refresh_interval)
-
-    def scan_finished(self, exit_code, exit_status):
-        self.scan_output()
-        self.reset_scan_controls()
-        self.refresh()
-        if not self.scanning:
-            self.message.setText("Scanning gestoppt")
-            return
-        self.schedule_scan()
-        if exit_code == 0 and exit_status == QProcess.ExitStatus.NormalExit:
-            self.check_critical_devices(repeat=True)
-            self.message.setText(f"Scan abgeschlossen · nächster Scan in {self.scan_interval.value()} Sekunden")
-        else:
-            self.message.setText("Scan fehlgeschlagen: " + (self.scan_log.strip().splitlines()[-1]
-                                 if self.scan_log.strip() else "Scanner wurde beendet"))
-
-    def scan_error(self, error):
+    def services_error(self, error):
         if error == QProcess.ProcessError.FailedToStart:
-            self.scanning = False
-            self.scan_timer.stop()
-            self.reset_scan_controls()
-            self.message.setText("Scanner konnte nicht gestartet werden: " + self.process.errorString())
+            self.service_status.setText("Dienstesteuerung konnte nicht gestartet werden: " + self.service_process.errorString())
+            self.finish_service_controls()
+
+    def finish_service_controls(self):
+        start_enabled, stop_enabled = self.service_button_state
+        self.start_services_button.setEnabled(start_enabled)
+        self.stop_services_button.setEnabled(stop_enabled)
+        self.scan_interval.setEnabled(True)
+        self.service_action = None
+
+    def services_finished(self, exit_code, exit_status):
+        self.services_output()
+        action = self.service_action
+        try:
+            result = json.loads(self.service_output)
+            if exit_code or "error" in result:
+                raise ValueError(result.get("error", "Dienstesteuerung fehlgeschlagen"))
+            if action == "status":
+                states = result["services"]
+                active = all(value == "running" for value in states.values()) and result["hardware"] == "active"
+                stopped_states = {"stopped", "exited", "dead", "inactive", "failed", "not-found"}
+                stopped = all(value in stopped_states for value in states.values()) and result["hardware"] in stopped_states
+                self.service_button_state = (not active, not stopped)
+                self.blink_on = active
+                self.update_scan_indicator()
+                labels = {"scanner": "Scanner", "mqtt": "MQTT", "telemetry": "Sensordaten", "sync": "Synchronisierung", "postgres": "Datenbank", "pdc": "Grafana-Verbindung"}
+                text = [labels[name] + ": " + ("läuft" if state == "running" else "gestoppt (" + state + ")") for name, state in states.items()]
+                text.append("LED-Steuerung: " + ("läuft" if result["hardware"] == "active" else result["hardware"]))
+                self.service_status.setText(" · ".join(text))
+            else:
+                # Wait for the follow-up status before enabling another action.
+                self.service_button_state = (False, False)
+                self.message.setText(result["message"])
+        except (ValueError, KeyError, TypeError) as exc:
+            self.service_button_state = (True, True)
+            self.service_status.setText("Dienstefehler: " + str(exc))
+            self.blink_on = False
+            self.update_scan_indicator()
+            if action != "status":
+                self.service_error.setText("Dienstefehler: " + str(exc))
+                self.message.setText("Aktion nicht vollständig abgeschlossen. Details siehe Dienstestatus.")
+        self.finish_service_controls()
+        pending = self.pending_service_action
+        self.pending_service_action = None
+        if pending or action != "status":
+            QTimer.singleShot(0, lambda: self.control_services(pending or "status"))
 
     def closeEvent(self, event):
-        self.led_alarm.close()
-        self.scanning = False
-        self.scan_timer.stop()
-        self.blink_timer.stop()
-        if self.process.state() != QProcess.ProcessState.NotRunning:
-            self.process.terminate()
-            self.message.setText("Scanner wird beendet … Fenster danach erneut schließen.")
-            QTimer.singleShot(1500, self.stop_scan)
+        if self.service_action in ("start", "stop"):
+            self.message.setText("Dienstesteuerung läuft noch. Fenster danach schließen.")
             event.ignore()
             return
+        self.service_timer.stop()
+        self.closing = True
+        self.pending_service_action = None
+        if self.service_process.state() != QProcess.ProcessState.NotRunning:
+            self.service_process.kill()
+            self.service_process.waitForFinished(1000)
         event.accept()
         if self.appearance_window is not None:
             self.appearance_window.close()
@@ -643,19 +793,15 @@ class MonitorWindow(QMainWindow):
         for popup in list(self.offline_popups.values()):
             popup.close()
 
-    def stop_scan(self):
-        if self.process.state() != QProcess.ProcessState.NotRunning:
-            self.process.kill()
-
     def refresh(self):
         try:
             devices = read_devices(self.db_path)
         except (sqlite3.Error, OSError, ValueError, KeyError) as exc:
             self.message.setText("Laden fehlgeschlagen; Anzeige enthält alte Daten: " + str(exc))
             return
-        devices = [device for device in devices if device["ip"] == self.target_ip]
+        devices = [device for device in devices if device["ip"] in self.sensor_targets]
         for device in devices:
-            device["hostname"] = self.sensor_name
+            device["hostname"] = self.sensor_targets[device["ip"]]
         self.devices = devices
         for device in devices:
             dialog = self.detail_windows.get(device["ip"])
@@ -666,10 +812,10 @@ class MonitorWindow(QMainWindow):
                 connection.update_device(device)
         self.render()
         self.check_critical_devices()
-        if self.process.state() != QProcess.ProcessState.NotRunning or self.scanning:
+        if self.service_action in ("start", "stop"):
             return
         if not devices:
-            self.message.setText("Sensor noch nicht geprüft. Scanning starten." if self.target_ip else
+            self.message.setText("Sensor noch nicht geprüft. Dienste starten." if self.target_ip else
                                  "Unter Einstellungen die IP-Adresse von alaa mac eintragen.")
         else:
             self.message.setText("Ansicht aktualisiert: " + datetime.now().strftime("%H:%M:%S")

@@ -10,3 +10,6 @@ router.json
 .router-*.tmp
 
 .venv-mqtt/
+firmware/**/wifi_credentials.h
+firmware/**/build/
+firmware/**/*.bin

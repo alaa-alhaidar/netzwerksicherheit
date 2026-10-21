@@ -17,9 +17,12 @@ def main():
     parser.add_argument('--node-id', default='lab-01')
     parser.add_argument('--interval', type=float, default=5)
     parser.add_argument('--once', action='store_true')
+    parser.add_argument('--temperature', type=float, help='Feste simulierte Temperatur, z.B. 43 für Alarmtest')
     args = parser.parse_args()
     if not math.isfinite(args.interval) or args.interval <= 0:
         parser.error('Intervall muss positiv und endlich sein')
+    if args.temperature is not None and (not math.isfinite(args.temperature) or args.temperature < -273.15):
+        parser.error('Temperatur muss endlich und mindestens -273.15 °C sein')
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     if os.getenv('MQTT_USERNAME'):
         client.username_pw_set(os.environ['MQTT_USERNAME'], os.getenv('MQTT_PASSWORD'))
@@ -35,7 +38,7 @@ def main():
                 'boot_id': boot, 'sequence': sequence,
                 'sent_at': datetime.now(timezone.utc).isoformat(), 'source': 'fake',
                 'measurements': {
-                    'temperature_c': round(23 + 2 * math.sin(phase), 2),
+                    'temperature_c': args.temperature if args.temperature is not None else round(23 + 2 * math.sin(phase), 2),
                     'pressure_hpa': round(1013 + 3 * math.sin(phase / 3), 2),
                     'humidity_pct': round(48 + 5 * math.cos(phase), 2),
                     'gas_resistance_ohm': round(120000 + 10000 * math.sin(phase / 2))}}

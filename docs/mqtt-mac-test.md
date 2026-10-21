@@ -80,3 +80,35 @@ Die aktualisierte SQL-Datei gewährt diese Rechte zusätzlich zu INSERT. Bei ein
 bereits eingerichteten Tabelle die SQL-Datei erneut ausführen. Anschließend
 `telemetry` neu starten. Bei anderen Fehlern zeigt die aktualisierte Version
 Fehlerklasse und SQLSTATE an, ohne Zugangsdaten zu protokollieren.
+
+## Temperaturalarm wie bei WLAN-Ausfall
+
+Der MQTT-Empfänger spiegelt die Temperatur zusätzlich nach
+`data/monitor.sqlite3`. Die laufende Qt-Oberfläche verwendet für als kritisch
+markierte Sensoren dieselbe Warnfenster- und LED-Funktion bei WLAN-Ausfall und
+bei Temperaturen **41 ≤ T ≤ 45 °C**. Die LED muss in den Einstellungen aktiviert
+sein. Die Temperaturprüfung verwendet nur Messwerte der letzten 15 Sekunden;
+außerhalb dieses Temperaturintervalls liegt kein Temperaturalarm vor.
+Besteht zugleich ein Netzwerkausfall, hält dieser den gemeinsamen Alarm aktiv.
+Die Qt-Oberfläche muss laufen, da sie weiterhin die GPIO-LED steuert.
+
+Nach Aktualisierung auf dem Pi:
+
+```bash
+sudo docker-compose -f docker/compose-cloud.yaml up -d --build telemetry
+```
+
+Die Qt-Oberfläche schließen und mit `scripts/start-gui.sh` neu starten.
+Für den Test die aktualisierte `scripts/mac_fake_sensor.py` auf den Mac kopieren,
+den bisherigen Sender stoppen und im bestehenden SSH-Tunnel starten:
+
+```bash
+python3 scripts/mac_fake_sensor.py --temperature 43
+```
+
+Mit `--temperature 23` lässt sich anschließend die Rückkehr zum Normalzustand
+testen. Temperaturalarme erscheinen in der Qt-Oberfläche, nicht als Grafana-Popup.
+
+## Grüne Verbindungs-LED
+
+Die GUI öffnet GPIO22 automatisch beim Start. Die grüne LED leuchtet dauerhaft, wenn der konfigurierte Sensor laut Netzwerkscan online ist und antwortet. Bei Offline-Status oder unbekanntem Status ist sie aus. Ein Temperaturalarm lässt die grüne LED bei bestehender Verbindung an; die separate Alarm-LED (aktuell GPIO27 in den GUI-Einstellungen) blinkt gleichzeitig. GPIO22 entspricht physischem Pin 15. Beide LEDs brauchen jeweils einen passenden Vorwiderstand. Der Status beider GPIO-Ausgänge steht unter Einstellungen.

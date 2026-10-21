@@ -1,6 +1,7 @@
 """Read-only statistics and Qt charts for recorded scanner measurements."""
 from datetime import datetime, timedelta, timezone
 import json
+import math
 from pathlib import Path
 import sqlite3
 
@@ -16,37 +17,43 @@ def load_statistics(path, hours, target_ip=None):
     empty = {"devices": [], "history": [], "availability": [], "services": []}
     if not Path(path).is_file():
         return empty
+    targets = [target_ip] if isinstance(target_ip, str) else list(target_ip or [])
+    placeholders = ','.join('?' for _ in targets)
+    clause = f"ip IN ({placeholders})" if target_ip is not None else '1=1'
+    if target_ip is not None and not targets:
+        clause = '0=1'
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
     with sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True, timeout=0.2) as db:
         db.row_factory = sqlite3.Row
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if 'devices' in tables:
             empty['devices'] = [dict(row) for row in db.execute(
-                'SELECT ip, online FROM devices WHERE (? IS NULL OR ip=?)', (target_ip, target_ip))]
+                f'SELECT ip, online FROM devices WHERE {clause}', targets)]
         if {'scans', 'observations'} <= tables:
-            empty['history'] = [dict(row) for row in db.execute('''
+            empty['history'] = [dict(row) for row in db.execute(f'''
                 SELECT s.id, s.checked, count(o.ip) AS total,
                        coalesce(sum(o.online), 0) AS online,
                        avg(CASE WHEN o.ping_upper_bound=0 THEN o.ping_ms END) AS ping
                 FROM scans s LEFT JOIN observations o ON s.id=o.scan_id
-                WHERE s.checked>=? AND (? IS NULL OR o.ip=?)
-                GROUP BY s.id ORDER BY s.id DESC LIMIT 400''', (cutoff, target_ip, target_ip))][::-1]
-            empty['availability'] = [dict(row) for row in db.execute('''
+                WHERE s.checked>=? AND {clause.replace('ip IN', 'o.ip IN')}
+                GROUP BY s.id ORDER BY s.id DESC LIMIT 400''', (cutoff, *targets))][::-1]
+            empty['availability'] = [dict(row) for row in db.execute(f'''
                 SELECT o.ip, count(*) AS samples, sum(o.online) AS online,
                        avg(CASE WHEN o.ping_upper_bound=0 THEN o.ping_ms END) AS ping
                 FROM observations o JOIN scans s ON s.id=o.scan_id
-                WHERE s.checked>=? AND (? IS NULL OR o.ip=?)
-                GROUP BY o.ip ORDER BY o.ip''', (cutoff, target_ip, target_ip))]
+                WHERE s.checked>=? AND {clause.replace('ip IN', 'o.ip IN')}
+                GROUP BY o.ip ORDER BY o.ip''', (cutoff, *targets))]
         if 'service_checks' in tables:
             empty['services'] = [dict(row) for row in db.execute(
-                'SELECT * FROM service_checks WHERE (? IS NULL OR ip=?) ORDER BY ip', (target_ip, target_ip))]
+                f'SELECT * FROM service_checks WHERE {clause} ORDER BY ip', targets)]
     return empty
 
 
 class HistoryChart(QWidget):
-    def __init__(self, caption, color, parent=None):
+    def __init__(self, caption, color, parent=None, integer_axis=False):
         super().__init__(parent)
         self.caption, self.color = caption, QColor(color)
+        self.integer_axis = integer_axis
         self.points = []
         self.setMinimumHeight(200)
 
@@ -72,6 +79,8 @@ class HistoryChart(QWidget):
             return
         left, right, top, bottom = 54, self.width()-24, 52, self.height()-38
         maximum = max(max(value for _, value in valid) * 1.15, 1)
+        if self.integer_axis:
+            maximum = max(2, math.ceil(max(value for _, value in valid) / 2) * 2)
         first, last = self.points[0][0], self.points[-1][0]
         duration = max(last-first, 1)
         painter.setPen(QPen(color('#dce4ee', '#34445c'), 1))
@@ -80,7 +89,9 @@ class HistoryChart(QWidget):
             painter.setPen(QPen(color('#dce4ee', '#34445c'), 1))
             painter.drawLine(QPointF(left, y), QPointF(right, y))
             painter.setPen(color('#62748a', '#a3b5ca'))
-            painter.drawText(8, int(y)+4, f'{maximum*index/2:.1f}')
+            tick = maximum * index / 2
+            label = f'{tick:.0f}' if self.integer_axis else f'{tick:.1f}'
+            painter.drawText(8, int(y)+4, label)
         previous = None
         painter.setPen(QPen(color(self.color.name(), '#70e5c1' if self.color.name() == '#087f68' else '#84b6ff'), 2))
         for stamp, value in self.points:
@@ -150,7 +161,7 @@ class StatisticsDialog(QDialog):
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
         charts = QHBoxLayout()
-        self.online_chart = HistoryChart('Erreichbare Geräte pro Scan', '#087f68')
+        self.online_chart = HistoryChart('Erreichbare Geräte pro Scan', '#087f68', integer_axis=True)
         self.ping_chart = HistoryChart('Durchschnittlicher Ping pro Scan (ms)', '#2563eb')
         charts.addWidget(self.online_chart)
         charts.addWidget(self.ping_chart)
@@ -172,7 +183,7 @@ class StatisticsDialog(QDialog):
 
     def refresh(self):
         try:
-            data = load_statistics(self.path, self.period.currentData(), getattr(self.parent(), 'target_ip', None))
+            data = load_statistics(self.path, self.period.currentData(), getattr(self.parent(), 'sensor_targets', getattr(self.parent(), 'target_ip', None)))
             devices = data['devices']
             online = sum(row['online'] for row in devices)
             ports = sum(len(json.loads(row['ports'])) for row in data['services'])
