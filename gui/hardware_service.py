@@ -11,6 +11,7 @@ from PyQt6.QtCore import QCoreApplication, QSettings, QTimer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gui.led_alarm import LEDAlarm, ConnectionLED
+from scanner.sensor_config import load_sensor_targets
 from scanner.temperature_alarm import read_temperature, temperature_in_alarm
 
 # BCM-GPIO für die Alarm-LED; hier im Code ändern.
@@ -37,8 +38,8 @@ class HardwareController:
 
     def refresh(self):
         self.settings.sync()
-        target = self.settings.value('sensor/ip', '')
-        targets = [ip for ip in (target, self.settings.value('camera/ip', '')) if ip]
+        targets = list(load_sensor_targets(self.settings))
+        target = targets[0] if targets else ''
         enabled = self.settings.value('hardware/led_enabled', False, type=bool)
         if enabled != self.enabled:
             self.alarm.configure(enabled, ALARM_LED_PIN)

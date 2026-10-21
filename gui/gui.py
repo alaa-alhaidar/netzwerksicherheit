@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scanner.sensor_registry import register_sensors
+from scanner.sensor_config import load_sensor_targets, save_sensor_targets
 from scanner.temperature_alarm import read_temperature, temperature_in_alarm
 
 try:
@@ -118,16 +119,26 @@ class AppearanceDialog(QDialog):
         title.setObjectName("title")
         layout.addWidget(title)
         form = QFormLayout()
-        self.sensor_ip = QLineEdit(parent.target_ip)
-        self.sensor_ip.setPlaceholderText("z. B. Arduino Nano: 192.168.178.…")
-        form.addRow("Gerät 1 – IP", self.sensor_ip)
-        self.sensor_name = QLineEdit(parent.sensor_name)
-        form.addRow("Gerät 1 – Name", self.sensor_name)
-        self.camera_ip = QLineEdit(parent.camera_ip)
-        self.camera_ip.setPlaceholderText("IPv4-Adresse der ESP32-CAM (optional)")
-        form.addRow("Gerät 2 – IP", self.camera_ip)
-        self.camera_name = QLineEdit(parent.camera_name)
-        form.addRow("Gerät 2 – Name", self.camera_name)
+        self.device_rows = []
+        self.device_list = QWidget()
+        self.device_layout = QVBoxLayout(self.device_list)
+        self.device_layout.setContentsMargins(0, 0, 0, 0)
+        self.device_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        for ip, name in parent.sensor_targets.items():
+            self.add_device_row(ip, name)
+        if not self.device_rows:
+            self.add_device_row()
+        device_scroll = QScrollArea()
+        device_scroll.setWidgetResizable(True)
+        device_scroll.setMinimumHeight(150)
+        device_scroll.setMaximumHeight(260)
+        device_scroll.setWidget(self.device_list)
+        self.device_scroll = device_scroll
+        form.addRow(QLabel("Geräte · Name und IPv4-Adresse"))
+        form.addRow(device_scroll)
+        add_device = QPushButton("+ Gerät hinzufügen")
+        add_device.clicked.connect(lambda: self.add_device_row())
+        form.addRow(add_device)
         save_sensor = QPushButton("Geräte speichern")
         save_sensor.clicked.connect(self.save_sensor)
         form.addRow(save_sensor)
@@ -206,14 +217,48 @@ class AppearanceDialog(QDialog):
     def apply_led(self):
         self.parent().apply_led(self.led_enabled.isChecked())
 
+    def add_device_row(self, ip="", name=""):
+        row = QWidget()
+        fields = QHBoxLayout(row)
+        fields.setContentsMargins(0, 0, 0, 0)
+        name_input = QLineEdit(name)
+        name_input.setPlaceholderText("Gerätename")
+        name_input.setAccessibleName("Gerätename")
+        ip_input = QLineEdit(ip)
+        ip_input.setPlaceholderText("192.168.178.…")
+        ip_input.setAccessibleName("IPv4-Adresse")
+        remove = QPushButton("−")
+        remove.setFixedWidth(44)
+        remove.setStyleSheet("padding: 6px;")
+        remove.setToolTip("Gerät aus der Liste entfernen; danach Geräte speichern")
+        remove.setAccessibleName("Gerät entfernen")
+        entry = (row, ip_input, name_input)
+        remove.clicked.connect(lambda: self.remove_device_row(entry))
+        fields.addWidget(name_input)
+        fields.addWidget(ip_input)
+        fields.addWidget(remove)
+        self.device_rows.append(entry)
+        self.device_layout.addWidget(row)
+        if not ip:
+            name_input.setFocus()
+        if hasattr(self, "device_scroll"):
+            QTimer.singleShot(0, lambda: self.device_scroll.ensureWidgetVisible(row)
+                              if any(entry[0] is row for entry in self.device_rows) else None)
+
+    def remove_device_row(self, entry):
+        self.device_rows.remove(entry)
+        self.device_layout.removeWidget(entry[0])
+        entry[0].deleteLater()
+
     def save_sensor(self):
+        targets = [(ip.text().strip(), name.text().strip()) for _, ip, name in self.device_rows
+                   if ip.text().strip() or name.text().strip()]
         try:
-            self.parent().set_sensor(self.sensor_ip.text().strip(), self.sensor_name.text().strip(),
-                                     self.camera_ip.text().strip(), self.camera_name.text().strip())
+            self.parent().set_sensors(targets)
         except (ValueError, sqlite3.Error) as exc:
             self.sensor_message.setText(str(exc))
             return
-        self.sensor_message.setText("Geräte gespeichert. Beide eingetragenen IPs werden überwacht.")
+        self.sensor_message.setText(f"{len(targets)} Geräte gespeichert. Der Scanner übernimmt die Liste beim nächsten Durchlauf.")
 
     def save_ranges(self):
         values = {
@@ -320,11 +365,8 @@ class MonitorWindow(QMainWindow):
         self.db_path = str(Path(db_path).resolve())
         self.devices = []
         self.settings = QSettings(str(Path(self.db_path).parent / "ui-settings.ini"), QSettings.Format.IniFormat)
-        self.target_ip = self.settings.value("sensor/ip", "")
-        self.sensor_name = self.settings.value("sensor/name", "alaa mac")
-        self.camera_ip = self.settings.value("camera/ip", "")
-        self.camera_name = self.settings.value("camera/name", "ESP32-CAM")
-        self.sensor_targets = {ip: name for ip, name in [(self.target_ip, self.sensor_name), (self.camera_ip, self.camera_name)] if ip}
+        self.sensor_targets = load_sensor_targets(self.settings)
+        self.target_ip, self.sensor_name = next(iter(self.sensor_targets.items()), ("", ""))
         register_sensors(self.db_path, list(self.sensor_targets.items()))
         self.view_mode = self.settings.value("appearance/view", "list")
         self.theme_mode = self.settings.value("appearance/theme", "light")
@@ -363,7 +405,7 @@ class MonitorWindow(QMainWindow):
         heading.addStretch()
         layout.addLayout(heading)
         self.blink_on = False
-        subtitle = QLabel("Arduino Nano und ESP32-CAM · Gerät anklicken für Details")
+        subtitle = QLabel("Konfigurierte Geräte · Gerät anklicken für Details")
         subtitle.setObjectName("muted")
         layout.addWidget(subtitle)
         toolbar = QWidget()
@@ -518,24 +560,19 @@ class MonitorWindow(QMainWindow):
         temporary.replace(TOLERANCE_STATE)
 
     def set_sensor(self, ip, name, camera_ip="", camera_name="ESP32-CAM"):
-        targets = [(address, label) for address, label in [(ip, name), (camera_ip, camera_name)] if address]
-        if not targets:
-            raise ValueError("Bitte mindestens eine Geräte-IP eingeben.")
+        self.set_sensors([(address, label) for address, label in [(ip, name), (camera_ip, camera_name)] if address])
+
+    def set_sensors(self, targets):
         if self.service_action in ("start", "stop"):
             raise ValueError("Bitte warten, bis die Dienstesteuerung abgeschlossen ist.")
+        targets = [(ip.strip(), name.strip() or "Sensor") for ip, name in targets]
+        register_sensors(self.db_path, targets)
         for dialog in list(self.detail_windows.values()) + list(self.connection_windows.values()):
             dialog.close()
-        register_sensors(self.db_path, targets)
-        self.target_ip, self.sensor_name = ip, name or "Arduino Nano"
-        self.camera_ip, self.camera_name = camera_ip, camera_name or "ESP32-CAM"
         self.sensor_targets = dict(targets)
-        self.settings.setValue("camera/ip", self.camera_ip)
-        self.settings.setValue("camera/name", self.camera_name)
-        self.settings.setValue("sensor/ip", self.target_ip)
-        self.settings.setValue("sensor/name", self.sensor_name)
-        self.settings.sync()
-        self.network_label.setText("Geräte: " + ", ".join(self.sensor_targets))
-        self.service_error.setText("Sensor geändert. Dienste stoppen und starten, um die neue IP zu übernehmen.")
+        self.target_ip, self.sensor_name = next(iter(self.sensor_targets.items()), ("", ""))
+        save_sensor_targets(self.settings, self.sensor_targets)
+        self.network_label.setText("Geräte: " + (", ".join(self.sensor_targets) or "noch nicht eingerichtet"))
         self.refresh()
         if self.statistics_window is not None:
             self.statistics_window.refresh()
@@ -716,7 +753,7 @@ class MonitorWindow(QMainWindow):
             self.message.setText("Dienste werden gestartet …" if action == "start" else "Dienste werden gestoppt …")
         script = Path(__file__).resolve().parents[1] / "scripts/control-services.py"
         self.service_process.start(sys.executable, [str(script), action, "--db", self.db_path,
-                                  "--target", (self.target_ip or self.camera_ip), "--interval", str(self.scan_interval.value())])
+                                  "--target", self.target_ip, "--interval", str(self.scan_interval.value())])
 
     def services_output(self):
         self.service_output += bytes(self.service_process.readAllStandardOutput()).decode(errors="replace")

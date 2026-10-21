@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 
@@ -20,8 +22,15 @@ PWA_UNITS = ['pi-alarm.service', 'pi-telemetry.service', 'pi-mqtt.service']
 def configured_sensor(db):
     settings = configparser.ConfigParser(interpolation=None)
     settings.read(db.parent / 'ui-settings.ini', encoding='utf-8')
-    return (settings.get('sensor', 'ip', fallback='') or settings.get('camera', 'ip', fallback=''),
-            settings.getint('scanner', 'interval', fallback=60))
+    target = settings.get('sensor', 'ip', fallback='') or settings.get('camera', 'ip', fallback='')
+    if db.is_file():
+        with closing(sqlite3.connect(db.resolve().as_uri() + '?mode=ro', uri=True, timeout=1)) as connection:
+            exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='registered_sensors'").fetchone()
+            if exists:
+                rows = connection.execute('SELECT ip FROM registered_sensors WHERE enabled=1 ORDER BY rowid').fetchall()
+                addresses = [row[0] for row in rows]
+                target = target if target in addresses else (addresses[0] if addresses else '')
+    return target, settings.getint('scanner', 'interval', fallback=60)
 
 
 def uses_pwa_services():
@@ -132,7 +141,7 @@ def main():
                 result = control(args.action, db, target, interval)
         print(json.dumps(result))
         return 0
-    except (OSError, ValueError, configparser.Error, RuntimeError, subprocess.SubprocessError) as exc:
+    except (OSError, ValueError, configparser.Error, sqlite3.Error, RuntimeError, subprocess.SubprocessError) as exc:
         print(json.dumps({'error': str(exc)}))
         return 1
 

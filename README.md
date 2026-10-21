@@ -380,16 +380,21 @@ Das vorhandene Grafana-Dashboard zählt dann die wirklichen Zeilen in PostgreSQL
 ein Import oder Wechsel der Datenquelle ist dafür nicht nötig. MQTT-Sensormesswerte
 sind weiterhin ein späterer Schritt; aktuell sind die realen Daten Nmap-/Ping-Prüfungen.
 
-### Zwei Geräte manuell eintragen
+### Geräte dynamisch eintragen
 
-Unter **Einstellungen** können zwei Geräte mit jeweils eigener IPv4-Adresse und
-eigenem Namen gespeichert werden, etwa Arduino Nano und ESP32-CAM. Ein leeres
-zweites IP-Feld lässt weiterhin die Überwachung eines einzelnen Geräts zu.
-Bereits gespeicherte IPs und Namen bleiben erhalten; doppelte und ungültige IPs
-werden zurückgewiesen. Nach der Änderung **Dienste starten** drücken, damit
-der Scanner mit der neuen Konfiguration gebaut und gestartet wird. Er liest
-alle aktiv eingetragenen Geräte bei jedem Durchlauf aus `registered_sensors`.
-Die GUI und ihre Statistik zeigen nur diese ausgewählten Geräte.
+Unter **Einstellungen** zeigt die Geräteliste für jedes Gerät einen Namen und
+seine IPv4-Adresse. **+ Gerät hinzufügen** fügt weitere Zeilen hinzu; **−** entfernt
+einen Eintrag. Mit **Geräte speichern** wird die gesamte Auswahl übernommen.
+Die bisherigen Nano- und Kamera-Einträge werden beim Umstieg beibehalten.
+Die Liste bleibt nach einem Neustart gespeichert. Doppelte und ungültige
+IP-Adressen werden zurückgewiesen; vollständig leere Zeilen werden ignoriert.
+
+Der Scanner liest die ausgewählten Geräte bei jedem Durchlauf erneut aus
+`registered_sensors`. Hinzufügen und Entfernen benötigen keinen Dienstneustart.
+Entfernte Geräte bleiben im Datenarchiv, werden aber nicht weiter überwacht
+oder in der GUI angezeigt. Die Liste kann auch vollständig geleert werden.
+GUI, Statistik und die eigenständige GPIO-Steuerung berücksichtigen die
+aktuelle Auswahl. Der erste Eintrag bleibt der primäre Temperatursensor.
 
 Unbekannte IP-Adressen findet man in der FRITZ!Box unter **Heimnetz → Netzwerk**.
 Ein ESP32-Hostname allein unterscheidet einen Nano ESP32 nicht sicher von einer
