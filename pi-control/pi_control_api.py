@@ -25,9 +25,12 @@ MQTT_SERVICE = "pi-mqtt.service"
 SERVICES = ("pi-alarm.service", "pi-telemetry.service")
 COMPOSE_FILE = "/home/alaa/network-monitor~/docker/compose-cloud.yaml"
 DOCKER_SERVICES = {"postgres", "sync", "pdc"}
-TELEMETRY_TOPIC = "iot/v1/nodes/pi-05/telemetry"
-ALARM_TOPIC = "iot/v1/nodes/pi-05/commands/alarm"
-ALARM_STATE_TOPIC = "iot/v1/nodes/pi-05/state/alarm"
+PUBLIC_MQTT_HOST = os.getenv("PUBLIC_MQTT_HOST", "broker.emqx.io")
+PUBLIC_MQTT_PORT = int(os.getenv("PUBLIC_MQTT_PORT", "8883"))
+PUBLIC_MQTT_CA_FILE = os.getenv("PUBLIC_MQTT_CA_FILE", "/etc/ssl/certs/ca-certificates.crt")
+TELEMETRY_TOPIC = "htw/alaa/iot2026/nano-01/telemetry"
+ALARM_TOPIC = "htw/alaa/iot2026/nano-01/commands/alarm"
+ALARM_STATE_TOPIC = "htw/alaa/iot2026/nano-01/state/alarm"
 TOLERANCE_FILE = "/home/alaa/pi-control/tolerance.json"
 MONITOR_DB = os.getenv("MONITOR_DB", "/home/alaa/network-monitor~/data/monitor.sqlite3")
 RANGE_BOUNDS = {
@@ -111,7 +114,7 @@ def service_state(service):
 
 def mqtt_available():
     try:
-        with socket.create_connection(("127.0.0.1", 1883), timeout=2):
+        with socket.create_connection((PUBLIC_MQTT_HOST, PUBLIC_MQTT_PORT), timeout=3):
             return True
     except OSError:
         return False
@@ -130,41 +133,31 @@ def docker_services_running():
 
 
 def monitor_action(action):
-    root = Path(COMPOSE_FILE).parents[1]
+    if action not in {"start", "stop"}:
+        raise ValueError("Ungültige Dienstaktion")
     result = subprocess.run(
-        [sys.executable, str(root / "scripts/control-services.py"), action,
-         "--db", str(root / "data/monitor.sqlite3")],
-        capture_output=True, text=True, timeout=660 if action != "status" else 60,
+        ["systemctl", "--user", action, *SERVICES],
+        capture_output=True, text=True, timeout=30,
     )
-    try:
-        payload = json.loads(result.stdout)
-    except ValueError:
-        raise RuntimeError("Dienstesteuerung lieferte keine gültige Antwort")
-    if result.returncode or "error" in payload:
-        raise RuntimeError(payload.get("error", "Dienstesteuerung fehlgeschlagen"))
-    return payload
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Dienstesteuerung fehlgeschlagen")
 
 
 def current_status():
-    try:
-        state = monitor_action("status")
-        services = state["services"]
-        mqtt_state = "active" if services.get("mqtt") == "running" else "unavailable"
-        docker = all(services.get(name) == "running" for name in ("scanner", "postgres", "sync", "pdc"))
-        return {
-            "running": all(value == "running" for value in services.values()) and state["hardware"] == "active",
-            "mqtt": mqtt_state,
-            "docker": "active" if docker else "incomplete",
-            "scanner": services.get("scanner", "stopped"),
-            "services": {
-                "pi-alarm.service": state["hardware"],
-                "pi-telemetry.service": "active" if services.get("telemetry") == "running" else services.get("telemetry", "inactive"),
-                "pi-mqtt.service": mqtt_state,
-            },
-        }
-    except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        return {"running": False, "mqtt": "unknown", "docker": "unknown",
-                "scanner": "unknown", "services": {}, "error": str(error)}
+    services = {service: service_state(service) for service in SERVICES}
+    mqtt = mqtt_available()
+    return {
+        "running": mqtt and all(state == "active" for state in services.values()),
+        "mqtt": "active" if mqtt else "unavailable",
+        "broker": f"{PUBLIC_MQTT_HOST}:{PUBLIC_MQTT_PORT} (TLS)",
+        "services": services,
+    }
+
+
+def configure_mqtt_client(client):
+    client.tls_set(ca_certs=PUBLIC_MQTT_CA_FILE)
+    if os.getenv("MQTT_USERNAME"):
+        client.username_pw_set(os.environ["MQTT_USERNAME"], os.getenv("MQTT_PASSWORD"))
 
 
 def receive_telemetry():
@@ -184,7 +177,8 @@ def receive_telemetry():
 
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect("127.0.0.1", 1883, 10)
+    configure_mqtt_client(client)
+    client.connect(PUBLIC_MQTT_HOST, PUBLIC_MQTT_PORT, 10)
     client.loop_start()
     try:
         if not received.wait(7):
@@ -223,7 +217,8 @@ def publish_alarm(enabled):
 
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect("127.0.0.1", 1883, 10)
+    configure_mqtt_client(client)
+    client.connect(PUBLIC_MQTT_HOST, PUBLIC_MQTT_PORT, 10)
     client.loop_start()
     try:
         if not confirmed.wait(7):
